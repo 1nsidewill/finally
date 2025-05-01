@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 import logging
 from src.config import get_settings
 from src.graph.router import graph_router
@@ -23,6 +24,11 @@ else:
         openapi_url=None,    # Disable OpenAPI schema
         root_path="/agent-service"
     )
+
+
+@app.get("/", include_in_schema=False)
+async def root_redirect():
+    return RedirectResponse(url="/agent-service/docs")
 
 # Serve static files
 # app.mount("/static", StaticFiles(directory="./static"), name="static")
