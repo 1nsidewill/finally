@@ -25,7 +25,6 @@ else:
         root_path="/agent-service"
     )
 
-
 @app.get("/", include_in_schema=False)
 async def root_redirect():
     return RedirectResponse(url="/agent-service/docs")
