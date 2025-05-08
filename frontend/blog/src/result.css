@@ -1,0 +1,88 @@
+.page-wrap {
+  font-family: sans-serif;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px;
+  font-weight: bold;
+  font-size: 24px;
+  border-bottom: 1px solid #ddd;
+}
+
+.main-content {
+  display: flex;
+}
+
+.sidebar {
+  width: 240px;
+  padding: 16px;
+  border-right: 1px solid #ddd;
+}
+
+.tags span {
+  display: inline-block;
+  background: #eee;
+  padding: 4px 8px;
+  margin: 4px;
+  border-radius: 12px;
+}
+
+.bikes-section {
+  flex-grow: 1;
+  padding: 24px;
+}
+
+.search-sort {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sort-buttons button {
+  margin-left: 8px;
+  padding: 6px 12px;
+}
+
+.bike-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.bike-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+.bike-card img {
+  width: 100%;
+  height: auto;
+}
+
+.bike-info {
+  padding: 12px;
+}
+
+.price {
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.tag {
+  font-size: 12px;
+  color: red;
+  margin: 6px 0;
+}
+
+.detail-btn {
+  background: #eee;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
