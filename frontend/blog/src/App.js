@@ -1,10 +1,18 @@
 import './App.css';
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 function App() {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+  const navigate = useNavigate();
+
+  const handleSubmit = () => {
+    if (inputValue.trim()) {
+      navigate('/result');
+    }
+  };
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -58,6 +66,7 @@ function App() {
         <button
           className={`send-button ${inputValue.trim() ? 'active' : ''}`}
           disabled={!inputValue.trim()}
+          onClick={handleSubmit}
         >
           <span className="material-symbols-outlined">arrow_upward</span>
         </button>
