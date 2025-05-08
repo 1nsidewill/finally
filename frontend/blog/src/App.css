@@ -2,7 +2,7 @@
   text-align: center;
 }
 
-.gnb{
+.gnb {
   background: black;
   width: 100%;
   display: flex;
@@ -10,4 +10,136 @@
   padding: 20px;
   font-weight: 600;
   font-size: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
 }
+
+.logo {
+  font-weight: bold;
+  font-size: 24px;
+}
+
+.menu-button {
+  font-size: 24px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: white;
+  margin-right: 20px;
+}
+
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 48;
+}
+
+.mobile-menu-wrapper {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+/* 메뉴 패널 */
+.mobile-menu {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.95);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 40px 24px;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+}
+
+@media (min-width: 768px) {
+  .mobile-menu {
+    width: 50vw;
+  }
+}
+
+@media (max-width: 767px) {
+  .mobile-menu {
+    width: 100vw;
+  }
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  align-self: flex-end;
+  margin-bottom: 20px;
+  cursor: pointer;
+}
+
+.menu-item {
+  background: none;
+  border: none;
+  font-size: 20px;
+  padding: 28px 0;
+  color: white;
+  cursor: pointer;
+  width: 100%;
+}
+
+
+
+.main-text {
+  margin-top: 40px;
+  font-size: 24px;
+}
+
+.input-container {
+  position: relative;
+  width: 80%;
+  max-width: 600px;
+  margin: 20px auto;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 60px 12px 20px;
+  border-radius: 30px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  outline: none;
+}
+
+.send-button {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  background-color: #ccc;
+  color: white;
+  border: none;
+  border-radius: 100%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: not-allowed;
+  transition: background-color 0.2s ease;
+}
+
+.send-button.active {
+  background-color: black;
+  cursor: pointer;
+}
+
+.send-button span {
+  font-size: 20px;
+}
+

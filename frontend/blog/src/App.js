@@ -1,29 +1,69 @@
-import logo from './logo.svg';
 import './App.css';
+import { useState, useEffect, useRef } from 'react';
 
 function App() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const menuRef = useRef(null);
 
-  let posts = '야마하';
-  function 함수(){
-    return 100
-  }
-  let style = { color : 'red', fontSize : '30px' };
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (menuOpen && menuRef.current && !menuRef.current.contains(event.target)) {
+        if (window.innerWidth >= 768) {
+          setMenuOpen(false);
+        }
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
 
   return (
     <div className="App">
-      <div className='gnb'>
-        <div>Finally</div>
+      {/* GNB */}
+      <header className="gnb">
+        <div className="logo">finally</div>
+        <button onClick={() => setMenuOpen(!menuOpen)} className="menu-button">
+          <span className="material-symbols-outlined">
+            {menuOpen ? 'close' : 'menu'}
+          </span>
+        </button>
+      </header>
+
+      {/* 모바일 메뉴 */}
+      {menuOpen && (
+        <div className="mobile-menu-wrapper">
+          <div className="mobile-menu" ref={menuRef}>
+            <button className="close-button" onClick={() => setMenuOpen(false)}>
+              <span className="material-symbols-outlined">close</span>
+            </button>
+            <button className="menu-item">Menu 1</button>
+            <button className="menu-item">Menu 2</button>
+            <button className="menu-item">Menu 3</button>
+          </div>
+        </div>
+      )}
+
+      {/* 본문 */}
+      <h4 className="main-text">finally you've got it</h4>
+
+      <div className="input-container">
+        <input
+          type="text"
+          placeholder="Ask me anything..."
+          className="input"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+        />
+        <button
+          className={`send-button ${inputValue.trim() ? 'active' : ''}`}
+          disabled={!inputValue.trim()}
+        >
+          <span className="material-symbols-outlined">arrow_upward</span>
+        </button>
       </div>
-      <h4>finally you've got it</h4>
-      <h4> { posts } </h4>
-      <h4> { 함수() } </h4>
-      <div className={ posts }>test</div>
-      <div style={ { color : 'blue', fontSize : '30px' } }>인라인에 스타일 넣고싶을 때</div>
-      <div style={ style }>변수를 넣어도 가능</div>
-      <img src={logo}/>
     </div>
   );
 }
-
 
 export default App;
