@@ -1,20 +1,34 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
+    "version": "0.0.1",
     "configurations": [
-
-        {
-            "name": "Python Debugger: FastAPI",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "uvicorn",
-            "args": [
-                "src.main:app",
-                "--reload"
-            ],
-            "jinja": true
+      {
+        "name": "API:DEV",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "fastapi",
+        "cwd": "${workspaceFolder}/src/", # Edit path where main.py
+        "args": [
+          "dev" # Dev mode
+        ],
+        "justMyCode": false,
+        "env": {
+          "ENVIRONMENT": "dev"
         }
+      },    
+      {
+        "name": "API:PROD",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "fastapi",
+        "cwd": "${workspaceFolder}/src/",  # Edit path where main.py
+        "args": [
+          "run" # Prod mode
+        ],
+        "justMyCode": false,
+        "env": {
+          "ENVIRONMENT": "prod"
+        }
+      }, 
     ]
-}
+  }
+  
