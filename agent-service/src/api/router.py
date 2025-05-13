@@ -10,7 +10,7 @@ from langchain.schema import Document
 from src.config import get_settings
 
 config = get_settings()
-graph_router = APIRouter()
+api_router = APIRouter()
 
 def load_txt_documents(data_dir: str) -> list:
     """data_dir 하위의 모든 .txt 파일을 Document 객체로 반환"""
@@ -39,7 +39,7 @@ vectorstore = Chroma.from_documents(
 )
 retriever = vectorstore.as_retriever()
 
-@graph_router.get("/query")
+@api_router.get("/query")
 async def query(input_query: str):
     system_instructions = """
     너는 바이크 중고매물을 사용자에게 추천하는 사람이야. 

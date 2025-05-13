@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 import logging
 from src.config import get_settings
-from src.graph.router import graph_router
+from src.api.router import api_router
 import os
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ async def root_redirect():
 # app.mount("/static", StaticFiles(directory="./static"), name="static")
 
 # Including Routers
-app.include_router(graph_router, prefix="/graph", tags=["graph"])
+app.include_router(api_router, prefix="/api", tags=["api"])
 
 @app.get("/health", include_in_schema=False)
 async def health_check():
