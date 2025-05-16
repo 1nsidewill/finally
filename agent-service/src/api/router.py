@@ -11,26 +11,11 @@ from langchain.schema import Document
 from src.config import get_settings
 from src.auth.jwt_utils import create_access_token, verify_access_token
 from src.api.models import QueryRequest, QueryResponse
+from src.api.document_utils import format_docs, load_txt_documents
+from src.auth.user_service import get_current_user
 
 config = get_settings()
 api_router = APIRouter()
-
-def load_txt_documents(data_dir: str) -> list:
-    """data_dir 하위의 모든 .txt 파일을 Document 객체로 반환"""
-    docs = []
-    for file_name in os.listdir(data_dir):
-        if file_name.endswith(".txt"):
-            file_path = os.path.join(data_dir, file_name)
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-                docs.append(Document(page_content=content, metadata={"file_name": file_name}))
-    return docs
-
-def format_docs(docs):
-    return "\n\n".join(
-        f"[{doc.metadata.get('file_name', 'unknown')}] {doc.page_content}"
-        for doc in docs
-    )
 
 # 벡터스토어 및 리트리버 초기화 (최초 1회만)
 DATA_DIR = os.path.join(os.path.dirname(__file__), "../../data")
@@ -42,28 +27,6 @@ vectorstore = Chroma.from_documents(
 )
 retriever = vectorstore.as_retriever()
 
-def get_current_user(request: Request):
-    # dev 환경에서는 인증 우회
-    if os.getenv("ENVIRONMENT", "dev") == "dev":
-        return {"sub": "dev-user"}
-    # 실제 인증
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="인증 토큰이 필요합니다.")
-    token = auth_header.split(" ")[1]
-    payload = verify_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="유효하지 않은 토큰입니다.")
-    return payload
-
-@api_router.post("/token")
-def issue_token(username: str, password: str):
-    # 실제 서비스라면 DB에서 사용자 검증
-    if not (username == "testuser" and password == "testpw"):
-        raise HTTPException(status_code=401, detail="인증 실패")
-    access_token = create_access_token({"sub": username})
-    return {"access_token": access_token, "token_type": "bearer"}
-
 @api_router.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest, user=Depends(get_current_user)):
     try:
@@ -73,16 +36,6 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
         내가 제공하는 매물 리스트 중에 제일 사용자의 질문과 유사한 매물을 골라 추천해줘. 
         여러개가 사용자의 질문에 잘맞으면 순위를 매겨 다중 매물을 추천해줘도돼.
         답변엔 file_name이 포함되어야해. 예: '1.txt' """
-
-        # # Setup retrievers
-        # milvus_vector_store = Milvus(
-        #     OpenAIEmbeddings(openai_api_key=config.OPENAI_API_KEY, model="text-embedding-3-large"),
-        #     connection_args={"host": config.MILVUS_URL.split(":")[0], "port": config.MILVUS_URL.split(":")[1]},
-        #     collection_name=config.MILVUS_COLLECTION_NAME,
-        # )
-        
-        # milvus_retriever = milvus_vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 10})
-        
         # Prompt 템플릿 정의
         prompt_template = f"""
             # 시스템 지시사항 \n
@@ -93,15 +46,11 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
             # 중고매물을 추천하기 위해 선별한 유사한 매물(내용) \n
             {{context}} \n
         """
-
         prompt = PromptTemplate.from_template(prompt_template)
-
-        # LLM 모델 생성
         llm_model = ChatOpenAI(
             model_name="gpt-4o",
             api_key=config.OPENAI_API_KEY,
         )
-
         chain = (
             {
                 "context": retriever | format_docs
@@ -110,12 +59,10 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
             | llm_model
             | StrOutputParser()
         )
-
         vector_search_query = input_query
         response = await chain.ainvoke(vector_search_query)
         return JSONResponse(status_code=200, content=QueryResponse(result=response).dict())
     except Exception as e:
-        # 예외에 따라 적절한 status code 반환
         if isinstance(e, ValueError):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         elif isinstance(e, KeyError):
