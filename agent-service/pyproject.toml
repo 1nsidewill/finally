@@ -7,6 +7,7 @@ requires-python = ">=3.13.3"
 dependencies = [
     "chromadb>=0.6.3",
     "fastapi[standard]>=0.115.12",
+    "jose>=1.0.0",
     "langchain>=0.3.24",
     "langchain-community>=0.3.23",
     "langchain-openai>=0.3.16",
@@ -14,6 +15,7 @@ dependencies = [
     "langsmith>=0.3.39",
     "pydantic-settings>=2.9.1",
     "pymilvus>=2.5.8",
+    "python-jose>=3.4.0",
     "uvicorn>=0.34.2",
 ]
 

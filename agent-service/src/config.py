@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     # OpenAPI Connection Info
     OPENAI_API_KEY: str
 
+    secret_key: str
+
     # 환경 파일 선택 및 로드 경로 출력
     env_file_path: ClassVar[str] = os.path.join(".", f".env.{os.getenv('ENVIRONMENT', 'dev')}")
     print(f"🟢 Loading environment file: {env_file_path}", flush=True)
