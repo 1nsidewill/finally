@@ -9,9 +9,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 import os
 from dotenv import load_dotenv
 
-# 환경 변수 로드
-load_dotenv()
-
+# 환경 변수 로드\\
 # 상태 정의
 class AgentState(TypedDict):
     messages: Annotated[Sequence[HumanMessage | AIMessage], "대화 메시지"]

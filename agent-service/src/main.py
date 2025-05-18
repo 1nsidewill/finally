@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 import logging
 from src.config import get_settings
 from src.api.router import api_router
+from src.auth.router import router as auth_router
 import os
 
 logger = logging.getLogger(__name__)
@@ -19,9 +20,6 @@ if environment in ['dev']:
 else:
     app = FastAPI(
         title=config.app_name,
-        docs_url=None,      # Disable Swagger UI
-        redoc_url=None,     # Disable ReDoc
-        openapi_url=None,    # Disable OpenAPI schema
         root_path="/agent-service"
     )
 
@@ -34,6 +32,7 @@ async def root_redirect():
 
 # Including Routers
 app.include_router(api_router, prefix="/api", tags=["api"])
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
 
 @app.get("/health", include_in_schema=False)
 async def health_check():
