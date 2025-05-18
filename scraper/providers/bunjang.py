@@ -68,7 +68,7 @@ async def fetch_products(keyword: str, page: int = 0):
         async with httpx.AsyncClient() as client:
             res = await client.get(
                 "https://api.bunjang.co.kr/api/1/find_v2.json",
-                params={"category_id": 750800, "q": keyword, "page": page, "n": 100}
+                params={"f_category_id": 750800, "q": keyword, "page": page, "n": 100}
             )
             res.raise_for_status()
             return res.json().get("list", [])
