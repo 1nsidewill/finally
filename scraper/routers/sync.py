@@ -79,6 +79,7 @@ async def sync_bunjang_bike(db: AsyncSession = Depends(get_db)):
 
     asyncio.create_task(run_keyword_sync())
 
+    logger.info(f"total_keywords: {total_keywords}, keyword_queue: {keyword_queue}")
     return {"message": f"{total_keywords}개 키워드 백그라운드 처리 시작"}
 
 async def run_keyword_sync():
