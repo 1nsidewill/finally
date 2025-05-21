@@ -38,6 +38,8 @@ finally/
 └── user-service/       # 회원가입, 로그인, 인증, 결제 등 Core API
 ````
 
+<img width="618" alt="image" src="https://github.com/user-attachments/assets/82307463-6000-439b-b2d4-e69bc1c1e31b" />
+
 ---
 
 ## 🛠 기술 스택
@@ -57,6 +59,12 @@ finally/
 
 * 🐳 [Docker](https://www.docker.com/), [Docker Compose](https://docs.docker.com/compose/) – 멀티서비스 컨테이너 관리 및 배포
 * 🌐 [Traefik](https://traefik.io/) – 컨테이너 기반 라우팅 및 SSL Reverse Proxy
+
+---
+
+## 📡 시스템 아키텍처
+
+<img width="606" alt="image" src="https://github.com/user-attachments/assets/218dac22-ed3d-4d6c-9da5-aa0691a92af3" />
 
 ---
 
