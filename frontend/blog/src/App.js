@@ -1,6 +1,9 @@
+/* eslint-disabled */
 import './App.css';
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import LoginPage from './pages/LoginPage';
+
 
 function App() {
   const [inputValue, setInputValue] = useState('');
@@ -10,7 +13,7 @@ function App() {
 
   const handleSubmit = () => {
     if (inputValue.trim()) {
-      navigate('/result');
+     navigate('/result', { state: { question: inputValue } });
     }
   };
 
@@ -45,9 +48,11 @@ function App() {
             <button className="close-button" onClick={() => setMenuOpen(false)}>
               <span className="material-symbols-outlined">close</span>
             </button>
+            <button className="menu-item" onClick={() => navigate('/login')}>로그인</button> {/* 로그인 버튼 */}
             <button className="menu-item">Menu 1</button>
             <button className="menu-item">Menu 2</button>
             <button className="menu-item">Menu 3</button>
+            
           </div>
         </div>
       )}
