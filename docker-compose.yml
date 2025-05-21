@@ -1,0 +1,71 @@
+version: "3.8"
+
+services:
+  traefik:
+    image: traefik:v2.9
+    container_name: traefik
+    command:
+      - --api.insecure=true
+      - --providers.docker=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.traefik.address=:8080
+      - --log.level=DEBUG
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    labels:
+      - "traefik.http.routers.traefik.rule=PathPrefix(`/traefik`)"
+      - "traefik.http.routers.traefik.entrypoints=traefik"
+      - "traefik.http.routers.traefik.service=api@internal"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - app-network
+
+  agent-service:
+    build:
+      context: ./finally/agent-service
+      dockerfile: Dockerfile
+    container_name: agent-service
+    env_file:
+      - ./finally/agent-service/.env.prod
+    environment:
+      - ENVIRONMENT=prod
+    labels:
+      - "traefik.http.routers.agent-service.rule=PathPrefix(`/agent-service`)"
+      - "traefik.http.services.agent-service.loadbalancer.server.port=80"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: 10
+    networks:
+      - app-network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: always
+    container_name: qdrant
+    ports:
+      - 6333:6333
+      - 6334:6334
+    expose:
+      - 6333
+      - 6334
+      - 6335
+    configs:
+      - source: qdrant_config
+        target: /qdrant/config/production.yaml
+    volumes:
+      - ./qdrant_data:/qdrant/storage
+
+configs:
+  qdrant_config:
+    content: |
+      log_level: INFO
+
+networks:
+  app-network:
+    external: true
