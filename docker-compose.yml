@@ -26,11 +26,11 @@ services:
 
   agent-service:
     build:
-      context: ./finally/agent-service
+      context: ./agent-service
       dockerfile: Dockerfile
     container_name: agent-service
     env_file:
-      - ./finally/agent-service/.env.prod
+      - ./agent-service/.env.prod
     environment:
       - ENVIRONMENT=prod
     labels:
