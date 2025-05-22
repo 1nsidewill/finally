@@ -26,4 +26,4 @@ def verify_access_token(token: str):
             return None
         return payload
     except JWTError:
-        return None 
+        return None
