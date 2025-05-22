@@ -4,6 +4,7 @@ import logging
 from src.config import get_settings
 from src.api.router import api_router
 from src.auth.router import router as auth_router
+from fastapi.middleware.cors import CORSMiddleware
 import os
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,14 @@ else:
         title=config.app_name,
         root_path="/agent-service"
     )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # 프론트엔드 개발 서버 주소
+    allow_credentials=True,
+    allow_methods=["*"],  # 또는 ["GET", "POST", "OPTIONS"] 등 필요한 메소드만
+    allow_headers=["*"],  # 또는 ["Content-Type", "Authorization"] 등 필요한 헤더만
+)
 
 @app.get("/", include_in_schema=False)
 async def root_redirect():
