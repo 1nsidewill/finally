@@ -1,4 +1,3 @@
-// src/pages/HomePage.jsx
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
