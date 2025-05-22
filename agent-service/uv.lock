@@ -18,6 +18,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pymilvus" },
     { name = "python-jose" },
+    { name = "pyyaml" },
     { name = "uvicorn" },
 ]
 
@@ -39,6 +40,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.9.1" },
     { name = "pymilvus", specifier = ">=2.5.8" },
     { name = "python-jose", specifier = ">=3.4.0" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "uvicorn", specifier = ">=0.34.2" },
 ]
 
