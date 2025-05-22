@@ -1,49 +1,74 @@
-// src/pages/LoginPage.js
-import { useState } from 'react';
+// src/pages/HomePage.jsx
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-export default function LoginPage() {
-  const [id, setId] = useState('');
-  const [pw, setPw] = useState('');
-  const [message, setMessage] = useState('');
+export default function HomePage() {
+  const [inputValue, setInputValue] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+  const navigate = useNavigate();
 
-  const handleLogin = async () => {
-    try {
-      const res = await fetch('http://34.64.229.242/agent-service/auth/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: id, password: pw })
-      });
-
-      if (!res.ok) {
-        throw new Error('로그인 실패');
-      }
-
-      const data = await res.json();
-      localStorage.setItem('token', data.access_token);
-      setMessage('✅ 로그인 성공!');
-    } catch (err) {
-      setMessage('❌ 로그인 실패: ' + err.message);
+  const handleSubmit = () => {
+    if (inputValue.trim()) {
+      navigate('/result', { state: { question: inputValue } });
     }
   };
 
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (menuOpen && menuRef.current && !menuRef.current.contains(event.target)) {
+        if (window.innerWidth >= 768) {
+          setMenuOpen(false);
+        }
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
+
   return (
-    <div style={{ padding: '2rem' }}>
-      <h2>로그인 테스트</h2>
-      <input
-        placeholder="아이디"
-        value={id}
-        onChange={(e) => setId(e.target.value)}
-        style={{ display: 'block', marginBottom: '10px' }}
-      />
-      <input
-        placeholder="비밀번호"
-        type="password"
-        value={pw}
-        onChange={(e) => setPw(e.target.value)}
-        style={{ display: 'block', marginBottom: '10px' }}
-      />
-      <button onClick={handleLogin}>로그인</button>
-      <p>{message}</p>
+    <div className="App">
+      <header className="gnb">
+        <div className="logo">finally</div>
+        <button onClick={() => setMenuOpen(!menuOpen)} className="menu-button">
+          <span className="material-symbols-outlined">
+            {menuOpen ? 'close' : 'menu'}
+          </span>
+        </button>
+      </header>
+
+      {menuOpen && (
+        <div className="mobile-menu-wrapper">
+          <div className="mobile-menu" ref={menuRef}>
+            <button className="close-button" onClick={() => setMenuOpen(false)}>
+              <span className="material-symbols-outlined">close</span>
+            </button>
+            <button className="menu-item" onClick={() => navigate('/login')}>로그인</button>
+            <button className="menu-item">Menu 1</button>
+            <button className="menu-item">Menu 2</button>
+            <button className="menu-item">Menu 3</button>
+          </div>
+        </div>
+      )}
+
+      <h4 className="main-text">finally you've got it</h4>
+
+      <div className="input-container">
+        <input
+          type="text"
+          placeholder="Ask me anything..."
+          className="input"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+        />
+        <button
+          className={`send-button ${inputValue.trim() ? 'active' : ''}`}
+          disabled={!inputValue.trim()}
+          onClick={handleSubmit}
+        >
+          <span className="material-symbols-outlined">arrow_upward</span>
+        </button>
+      </div>
     </div>
   );
 }
