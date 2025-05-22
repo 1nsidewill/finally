@@ -1,5 +1,6 @@
 // src/pages/LoginPage.js
 import { useState } from 'react';
+import { login } from '../api/auth';
 
 export default function LoginPage() {
   const [id, setId] = useState('');
@@ -8,21 +9,12 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     try {
-      const res = await fetch('http://34.64.229.242/agent-service/auth/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: id, password: pw })
-      });
-
-      if (!res.ok) {
-        throw new Error('로그인 실패');
-      }
-
-      const data = await res.json();
-      localStorage.setItem('token', data.access_token);
-      setMessage('✅ 로그인 성공!');
+      const res = await login(id, pw);
+      alert('로그인 성공!');
+      setMessage('로그인 성공!');
     } catch (err) {
-      setMessage('❌ 로그인 실패: ' + err.message);
+      alert('로그인 실패!');
+      setMessage('헉!!!로그인 실패!');
     }
   };
 

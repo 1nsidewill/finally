@@ -1,4 +1,4 @@
-import './result.css';
+import '../style/result.css';
 
 const bikes = [
   {
