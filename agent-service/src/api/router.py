@@ -1,4 +1,7 @@
 import os
+import time
+import logging
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status, Depends, Request
 from fastapi.responses import JSONResponse
@@ -14,10 +17,20 @@ from src.api.schema import *
 from src.api.document_utils import format_docs, load_txt_documents
 from src.auth.user_service import get_current_user
 
+# 로거 설정
+logger = logging.getLogger("api")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
 config = get_settings()
 api_router = APIRouter()
 
 # 벡터스토어 및 리트리버 초기화 (최초 1회만)
+logger.info("🔄 벡터스토어 초기화 중...")
 DATA_DIR = os.path.join(os.path.dirname(__file__), "../../data")
 docs_list = load_txt_documents(DATA_DIR)
 vectorstore = Chroma.from_documents(
@@ -26,9 +39,14 @@ vectorstore = Chroma.from_documents(
     embedding=OpenAIEmbeddings(openai_api_key=config.OPENAI_API_KEY, model="text-embedding-3-large"),
 )
 retriever = vectorstore.as_retriever()
+logger.info(f"✅ 벡터스토어 초기화 완료. 문서 {len(docs_list)}개 로드됨")
 
 @api_router.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest, user=Depends(get_current_user)):
+    request_id = f"req_{int(time.time())}"
+    start_time = time.time()
+    logger.info(f"🔍 [{request_id}] 검색 요청 시작 - 사용자: {user}, 쿼리: '{request.question}'")
+    
     try:
         input_query = request.question
         system_instructions = """
@@ -41,8 +59,8 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
         - url: 매물 상세 페이지 URL (예: https://example.com/listings/ID)
         - img_url: 매물 이미지 URL (예: https://example.com/images/ID.jpg)
         - price: 매물 가격 (숫자로만 표기, 예: 4600000)
-        - content: 매물에 대한 내용. 이미 요약되어 있는 내용이기에 빠짐없이 제공
-        - match_summary: 사용자 질문과 매물의 연관성 설명 (추천하는 이유, 캐주얼하게 이모지 사용해도 됨)
+        - content: 매물의 내용. 이미 요약되어 있기 때문에 그대로 제공
+        - match_summary: 사용자 질문과 매물의 연관성 설명 (추천하는 이유)
         
         사용자의 질문에 맞는 매물을 선별하여 추천하고, 반드시 사용자 질문과의 관련성에 따라 순위를 매겨서 제공하세요.
         순위 1이 가장 사용자 요구사항에 맞는 매물이어야 합니다.
@@ -61,6 +79,8 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
         """
         prompt = PromptTemplate.from_template(prompt_template)
         
+        logger.info(f"📄 [{request_id}] 관련 문서 검색 중...")
+        
         # with_structured_output으로 PropertyItems 형식 지정
         llm_model = ChatOpenAI(
             model_name="gpt-4o",
@@ -77,6 +97,7 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
         )
         
         vector_search_query = input_query
+        logger.info(f"🤖 [{request_id}] LLM에 추천 요청 중...")
         property_items = await chain.ainvoke(vector_search_query)
         
         # PropertyItems에서 items 필드를 추출하여 QueryResponse에 넣음
@@ -89,14 +110,21 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
             success=True
         )
         
+        process_time = time.time() - start_time
+        logger.info(f"✅ [{request_id}] 검색 완료: {len(sorted_items)}개 매물 추천, 처리 시간: {process_time:.2f}초")
+        
         return response
         
     except Exception as e:
+        process_time = time.time() - start_time
         if isinstance(e, ValueError):
+            logger.error(f"❌ [{request_id}] 잘못된 요청: {str(e)}, 처리 시간: {process_time:.2f}초")
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         elif isinstance(e, KeyError):
+            logger.error(f"❌ [{request_id}] 처리 오류: {str(e)}, 처리 시간: {process_time:.2f}초")
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
         else:
+            logger.error(f"❌ [{request_id}] 서버 오류: {str(e)}, 처리 시간: {process_time:.2f}초", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
                 detail="서버 내부 오류: " + str(e)
