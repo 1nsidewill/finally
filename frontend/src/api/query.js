@@ -1,17 +1,29 @@
-import axios from 'axios';
-
 export async function getRecommendation(question) {
-  const token = localStorage.getItem('token'); // 저장된 토큰 불러오기
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('❌ 토큰이 없습니다. 먼저 로그인 해주세요.');
+  }
 
-  const response = await axios.post(
-    'http://34.64.229.242/agent-service/api/query',
-    { question },
-    {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`, // 헤더에 토큰 포함
-      },
+  const response = await fetch('http://34.64.229.242/agent-service/api/query', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ question }), // 질문 내용 포함
+  });
+
+  if (!response.ok) {
+    let errorData;
+    try {
+      errorData = await response.json();
+    } catch {
+      errorData = { detail: '응답 파싱 실패' };
     }
-  );
-  return response.data.result;
+    console.error('요청 실패:', errorData);
+    throw new Error(errorData?.detail || '알 수 없는 오류');
+  }
+
+  const data = await response.json();
+  return data.result;
 }
