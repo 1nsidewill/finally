@@ -4,7 +4,7 @@ export async function getRecommendation(question) {
     throw new Error('❌ 토큰이 없습니다. 먼저 로그인 해주세요.');
   }
 
-  const response = await fetch('http://34.64.229.242/agent-service/api/query', {
+  const response = await fetch('http://34.47.76.15/agent-service/api/query', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
