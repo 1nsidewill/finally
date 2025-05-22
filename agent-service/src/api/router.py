@@ -70,7 +70,7 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
         
         # LLM 모델 설정 및 구조화된 출력 구성
         llm_model = ChatOpenAI(
-            model_name="gpt-4o",
+            model_name="gpt-4.1",
             api_key=config.OPENAI_API_KEY,
             temperature=0.1
         ).with_structured_output(PropertyItems)

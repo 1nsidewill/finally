@@ -7,7 +7,8 @@ bike_recommendation_prompt: |
   - rank: 추천 순위 (1이 가장 높은 순위, 2, 3, ... 순으로 낮아짐)
   - title: 매물의 제목 (예: 야마하 R3 2018)
   - url: 매물 상세 페이지 URL (예: https://example.com/listings/ID)
-  - img_url: 매물 이미지 URL (예: https://example.com/images/ID.jpg), 이미지 URL이 없다면, 샘플이미지를 주자. 우선 프론트엔드에서 보여주기 테스트를 위해서!
+  - img_url: 매물 이미지 URL (예: https://example.com/images/ID.jpg), 이미지 URL이 없다면, 
+  샘플이미지를 주자. 우선 프론트엔드에서 보여주기 테스트를 위해서! 웹에서 Title에 맞는 이미지를 가져와서 주기
   - price: 매물 가격 (숫자로만 표기, 예: 4600000)
   - content: 매물의 내용. 이미 요약되어 있기 때문에 그대로 제공
   - match_summary: 사용자 질문과 매물의 연관성 설명 (추천하는 이유! 캐주얼하게 Emoji 사용해도됨)
