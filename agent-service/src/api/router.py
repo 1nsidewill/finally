@@ -14,15 +14,6 @@ from src.api.document_utils import format_docs, load_txt_documents
 from src.api.utils import load_prompts
 from src.auth.user_service import get_current_user
 
-# 로거 설정
-logger = logging.getLogger("api")
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-
 # 설정 로드
 config = get_settings()
 api_router = APIRouter()
@@ -31,7 +22,7 @@ api_router = APIRouter()
 PROMPTS = load_prompts()
 
 # 벡터스토어 및 리트리버 초기화
-logger.info("🔄 벡터스토어 초기화 중...")
+logging.info("🔄 벡터스토어 초기화 중...")
 DATA_DIR = os.path.join(os.path.dirname(__file__), "../../data")
 docs_list = load_txt_documents(DATA_DIR)
 vectorstore = Chroma.from_documents(
@@ -40,7 +31,7 @@ vectorstore = Chroma.from_documents(
     embedding=OpenAIEmbeddings(openai_api_key=config.OPENAI_API_KEY, model="text-embedding-3-large"),
 )
 retriever = vectorstore.as_retriever()
-logger.info(f"✅ 벡터스토어 초기화 완료. 문서 {len(docs_list)}개 로드됨")
+logging.info(f"✅ 벡터스토어 초기화 완료. 문서 {len(docs_list)}개 로드됨")
 
 @api_router.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest, user=Depends(get_current_user)):
@@ -51,13 +42,13 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
     """
     request_id = f"req_{int(time.time())}"
     start_time = time.time()
-    logger.info(f"🔍 [{request_id}] 검색 요청 시작 - 사용자: {user}, 쿼리: '{request.question}'")
+    logging.info(f"🔍 [{request_id}] 검색 요청 시작 - 사용자: {user}, 쿼리: '{request.question}'")
     
     try:
         # YAML에서 로드한 프롬프트 템플릿 사용
         bike_prompt = PROMPTS.get("bike_recommendation_prompt", "")
         if not bike_prompt:
-            logger.error(f"❌ [{request_id}] 프롬프트 템플릿을 찾을 수 없습니다")
+            logging.error(f"❌ [{request_id}] 프롬프트 템플릿을 찾을 수 없습니다")
             raise ValueError("프롬프트 템플릿을 찾을 수 없습니다")
         
         # 프롬프트 템플릿 설정
@@ -66,7 +57,7 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
             template_format="jinja2"
         )
         
-        logger.info(f"📄 [{request_id}] 관련 문서 검색 중...")
+        logging.info(f"📄 [{request_id}] 관련 문서 검색 중...")
         
         # LLM 모델 설정 및 구조화된 출력 구성
         llm_model = ChatOpenAI(
@@ -86,7 +77,7 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
         )
         
         # LLM에 추천 요청
-        logger.info(f"🤖 [{request_id}] LLM에 추천 요청 중...")
+        logging.info(f"🤖 [{request_id}] LLM에 추천 요청 중...")
         property_items = await chain.ainvoke(request.question)
         
         # 순위에 따라 결과 정렬
@@ -101,7 +92,7 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
         
         # 처리 완료 로깅
         process_time = time.time() - start_time
-        logger.info(f"✅ [{request_id}] 검색 완료: {len(sorted_items)}개 매물 추천, 처리 시간: {process_time:.2f}초")
+        logging.info(f"✅ [{request_id}] 검색 완료: {len(sorted_items)}개 매물 추천, 처리 시간: {process_time:.2f}초")
         
         return response
         
@@ -109,13 +100,13 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
         # 오류 처리 및 로깅
         process_time = time.time() - start_time
         if isinstance(e, ValueError):
-            logger.error(f"❌ [{request_id}] 잘못된 요청: {str(e)}, 처리 시간: {process_time:.2f}초")
+            logging.error(f"❌ [{request_id}] 잘못된 요청: {str(e)}, 처리 시간: {process_time:.2f}초")
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         elif isinstance(e, KeyError):
-            logger.error(f"❌ [{request_id}] 처리 오류: {str(e)}, 처리 시간: {process_time:.2f}초")
+            logging.error(f"❌ [{request_id}] 처리 오류: {str(e)}, 처리 시간: {process_time:.2f}초")
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
         else:
-            logger.error(f"❌ [{request_id}] 서버 오류: {str(e)}, 처리 시간: {process_time:.2f}초", exc_info=True)
+            logging.error(f"❌ [{request_id}] 서버 오류: {str(e)}, 처리 시간: {process_time:.2f}초", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
                 detail="서버 내부 오류: " + str(e)
