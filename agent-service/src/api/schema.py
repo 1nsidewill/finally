@@ -7,6 +7,7 @@ class PropertyItem(BaseModel):
     url: str
     img_url: str
     price: int  # 정수형으로 변경
+    odo: str = Field(..., description="주행거리 (예: 46000km, 34000키로)")
     content: str
     match_summary: str
 
@@ -24,6 +25,7 @@ class PropertyItems(BaseModel):
                         "url": "https://example.com/listings/13579",
                         "img_url": "https://example.com/images/r3.jpg",
                         "price": 4600000,
+                        "odo": "8000km",
                         "content": "2018년식 야마하 R3 오토바이입니다. 주행거리 8,000km, 단독 사고 없음, 초보 라이더에게 적합한 모델입니다.",
                         "match_summary": "입문용으로 최적, 저렴한 유지비"
                     }
@@ -60,6 +62,7 @@ class QueryResponse(BaseModel):
                         "url": "https://example.com/listings/13579",
                         "img_url": "https://example.com/images/r3.jpg",
                         "price": 4600000,
+                        "odo": "8000km",
                         "content": "2018년식 야마하 R3 오토바이입니다. 주행거리 8,000km, 단독 사고 없음, 초보 라이더에게 적합한 모델입니다.",
                         "match_summary": "입문용으로 최적, 저렴한 유지비"
                     }
