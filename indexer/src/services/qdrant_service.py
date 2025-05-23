@@ -119,8 +119,8 @@ class QdrantService:
             vehicle_info.append(f"연식: {metadata.year}년")
         if metadata.price:
             vehicle_info.append(f"가격: {metadata.price:,}원")
-        if metadata.km:
-            vehicle_info.append(f"주행거리: {metadata.km:,}km")
+        if metadata.odo:
+            vehicle_info.append(f"주행거리: {metadata.odo:,}km")
         if metadata.color:
             vehicle_info.append(f"색상: {metadata.color}")
 
