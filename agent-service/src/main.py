@@ -6,9 +6,8 @@ from src.api.router import api_router
 from src.auth.router import router as auth_router
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from src.logging_config import configure_logging
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)  # 로그 레벨 설정
 
 config = get_settings()
 
@@ -48,8 +47,10 @@ async def health_check():
     """
     간단한 헬스체크 엔드포인트
     """
+    logging.info("헬스체크 요청 받음")
     return {"status": "Good"}
 
 if __name__ == "__main__":
     import uvicorn
+    logging.info(f"서버 시작 - 환경: {environment}")
     uvicorn.run("src.main:app", host="0.0.0.0", port=8000, proxy_headers=True, forwarded_allow_ips="*")
