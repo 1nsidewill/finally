@@ -10,6 +10,7 @@ class PropertyItem(BaseModel):
     odo: str = Field(..., description="주행거리 (예: 46000km, 34000키로)")
     content: str
     match_summary: str
+    hash_tags: List[str] = Field(..., description="해시태그 목록 (예: ['#아크라포빅 풀배기', '#좌꿍', '#정비에 미치다', '#올바라시', '#네고가능'])")
 
 # LangChain structured output을 위한 클래스
 class PropertyItems(BaseModel):
@@ -27,7 +28,8 @@ class PropertyItems(BaseModel):
                         "price": 4600000,
                         "odo": "8000km",
                         "content": "2018년식 야마하 R3 오토바이입니다. 주행거리 8,000km, 단독 사고 없음, 초보 라이더에게 적합한 모델입니다.",
-                        "match_summary": "입문용으로 최적, 저렴한 유지비"
+                        "match_summary": "입문용으로 최적, 저렴한 유지비",
+                        "hash_tags": ["#야마하", "#R3", "#초보자용", "#저주행", "#깔끔매물"]
                     }
                 ]
             }
@@ -64,7 +66,8 @@ class QueryResponse(BaseModel):
                         "price": 4600000,
                         "odo": "8000km",
                         "content": "2018년식 야마하 R3 오토바이입니다. 주행거리 8,000km, 단독 사고 없음, 초보 라이더에게 적합한 모델입니다.",
-                        "match_summary": "입문용으로 최적, 저렴한 유지비"
+                        "match_summary": "입문용으로 최적, 저렴한 유지비",
+                        "hash_tags": ["#야마하", "#R3", "#초보자용", "#저주행", "#깔끔매물"]
                     }
                 ]
             }
