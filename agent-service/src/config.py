@@ -12,9 +12,23 @@ class Settings(BaseSettings):
     # OpenAPI Connection Info
     OPENAI_API_KEY: str
 
+    # Qdrant Connection Info
+    QDRANT_HOST: str  # GCP 서버 주소
+    QDRANT_PORT: int
+    QDRANT_GRPC_PORT: int
+    QDRANT_PREFER_GRPC: bool
+    QDRANT_COLLECTION: str
+    VECTOR_SIZE: int # 임베딩 벡터 차원 수
+
     secret_key: str
     test_username: str
     test_password: str
+
+    DB_HOST: str
+    DB_PORT: int
+    DB_NAME: str
+    DB_USER: str
+    DB_PASSWORD: str
 
     # 환경 파일 선택 및 로드 경로 출력
     env_file_path: ClassVar[str] = os.path.join(".", f".env.{os.getenv('ENVIRONMENT', 'dev')}")
