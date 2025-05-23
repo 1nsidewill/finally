@@ -73,7 +73,7 @@ def format_qdrant_docs(docs):
             URL: {url if url else "URL 정보 없음"}
             이미지: {img_url if img_url else "이미지 정보 없음"}
             가격: {formatted_price}
-            {formatted_odo}
+            적산/주행거리: {formatted_odo}
             브랜드/모델: {brand} {model_name}
             내용: {content}
             ---
