@@ -10,6 +10,14 @@ from qdrant_client.models import Record, ScoredPoint, UpdateResult, UpdateStatus
 from src.api.models import QdrantDocument
 from src.api.schema import DocumentCreate, DocumentUpdate, DocumentMetadata
 from src.config import get_settings
+from langchain_openai import OpenAIEmbeddings
+from langchain_core.embeddings import Embeddings
+
+# 캐싱 관련 import 추가
+from langchain.embeddings import CacheBackedEmbeddings
+from langchain.storage import LocalFileStore
+import hashlib
+import re
 
 config = get_settings()
 
@@ -48,6 +56,28 @@ class QdrantService:
             prefer_grpc=self.prefer_grpc
         )
         
+        # 기본 OpenAI 임베딩 모델 초기화
+        base_embeddings = OpenAIEmbeddings(
+            model="text-embedding-3-large",
+            openai_api_key=config.OPENAI_API_KEY,
+            dimensions=self.vector_size,
+        )
+        
+        # 캐싱 설정 - 로컬 파일 시스템 사용 (테스트용)
+        cache_dir = "./cache/embeddings"
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        store = LocalFileStore(cache_dir)
+        
+        # 캐시 백업 임베딩 초기화
+        self.embeddings = CacheBackedEmbeddings.from_bytes_store(
+            base_embeddings,
+            store,
+            namespace=f"{base_embeddings.model}-{self.vector_size}d"  # 모델명 + 차원수로 네임스페이스 구분
+        )
+        
+        print(f"임베딩 캐시 설정 완료: {cache_dir}")
+        
         # 컬렉션이 없으면 생성
         self._create_collection_if_not_exists()
     
@@ -67,19 +97,78 @@ class QdrantService:
             )
             print(f"컬렉션 '{self.collection_name}'이 생성되었습니다.")
     
-    async def generate_embedding(self, text: str) -> List[float]:
-        """텍스트에서 임베딩 벡터 생성 (임베딩 모델을 사용하여 구현 필요)"""
-        # 여기서는 임시로 랜덤 벡터 생성 (실제 구현시 임베딩 모델로 대체해야 함)
-        # 예: sentence-transformers, OpenAI 임베딩 API 등 사용
-        return list(np.random.rand(self.vector_size).astype(float))
-    
+    async def generate_embedding_text(self, document: DocumentCreate) -> str:
+        """문서 정보를 기반으로 구조화된 프롬프트 형식의 임베딩용 텍스트 생성"""
+        # 이미 임베딩 텍스트가 제공된 경우
+        if document.embedding_text:
+            return document.embedding_text
+        
+        metadata = document.metadata or DocumentMetadata()
+        
+        # 구조화된 프롬프트 형식으로 임베딩 텍스트 생성
+        embedding_parts = []
+        
+        # 1. 제목 (가장 중요한 정보)
+        embedding_parts.append(f"## 제목: {document.title}")
+        
+        # 2. 핵심 매물 정보 (고가치 정보들)
+        vehicle_info = []
+        if metadata.model_name:
+            vehicle_info.append(f"모델명: {metadata.model_name}")
+        if metadata.year:
+            vehicle_info.append(f"연식: {metadata.year}년")
+        if metadata.price:
+            vehicle_info.append(f"가격: {metadata.price:,}원")
+        if metadata.km:
+            vehicle_info.append(f"주행거리: {metadata.km:,}km")
+        if metadata.color:
+            vehicle_info.append(f"색상: {metadata.color}")
+
+        if vehicle_info:
+            embedding_parts.append(f"### 매물 정보:\n{' | '.join(vehicle_info)}")
+        
+        # 3. 상세 내용 (설명 텍스트)
+        if metadata.content:
+            embedding_parts.append(f"### 매물 상세 설명:\n{metadata.content}")
+        
+        # 4. 추가 정보 (있는 경우)
+        additional_info = []
+        if metadata.image_url:
+            additional_info.append("이미지 첨부됨")
+        if metadata.last_modified_at:
+            additional_info.append(f"최종 수정: {metadata.last_modified_at}")
+        
+        if additional_info:
+            embedding_parts.append(f"### 추가 정보: {' | '.join(additional_info)}")
+        
+        # 구조화된 텍스트 결합
+        embedding_text = "\n\n".join(embedding_parts)
+        
+        return embedding_text
+
     async def insert_document(self, document: DocumentCreate, wait: bool = True) -> str:
         """문서를 Qdrant에 삽입"""
-        # 문서 ID 처리 (제공된 경우 사용, 아니면 생성)
-        doc_id = document.id if document.id else str(uuid.uuid4())
+        # Qdrant point ID 결정 (DB UID 우선 사용)
+        if document.metadata and document.metadata.id:
+            # DB UID가 있으면 그걸 Qdrant point ID로 사용
+            point_id = str(document.metadata.id)
+        elif document.id:
+            # Document ID가 있으면 사용
+            point_id = document.id
+        else:
+            # 둘 다 없으면 새로 생성
+            point_id = str(uuid.uuid4())
+            # 생성된 ID를 metadata에도 저장
+            if document.metadata:
+                document.metadata.id = point_id
+            else:
+                document.metadata = DocumentMetadata(id=point_id)
         
-        # 문서 내용에서 임베딩 생성
-        vector = await self.generate_embedding(document.content)
+        # 임베딩용 텍스트 생성
+        embedding_text = await self.generate_embedding_text(document)
+        
+        # 임베딩 생성
+        vector = await self.generate_embedding(embedding_text)
         
         # 메타데이터 준비
         metadata_dict = document.metadata.dict(exclude_none=True) if document.metadata else {}
@@ -90,17 +179,18 @@ class QdrantService:
             wait=wait,
             points=[
                 PointStruct(
-                    id=doc_id,
+                    id=point_id,  # DB UID = Qdrant point ID
                     vector=vector,
                     payload={
-                        "content": document.content,
+                        "title": document.title,
+                        "embedding_text": embedding_text,
                         **metadata_dict
                     }
                 )
             ]
         )
         
-        return doc_id
+        return point_id
     
     async def batch_insert_documents(
         self, 
@@ -113,20 +203,29 @@ class QdrantService:
         doc_ids = []
         points = []
         
-        # ID 리스트가 제공되었는지 확인
-        use_provided_ids = ids is not None and len(ids) == len(documents)
+        # 모든 문서의 임베딩 텍스트를 먼저 생성
+        embedding_texts = []
+        for document in documents:
+            embedding_text = await self.generate_embedding_text(document)
+            embedding_texts.append(embedding_text)
+        
+        # 배치로 임베딩 생성 (성능 향상)
+        vectors = await self.generate_embeddings_batch(embedding_texts)
         
         for idx, document in enumerate(documents):
-            # 문서 ID 처리 (제공된 경우 사용, 아니면 생성)
-            if use_provided_ids:
-                doc_id = ids[idx]
+            # UUID 형식 보장
+            if document.metadata and document.metadata.id:
+                point_id = convert_to_uuid_if_needed(str(document.metadata.id))
+            elif document.id:
+                point_id = convert_to_uuid_if_needed(document.id)
             else:
-                doc_id = document.id if document.id else str(uuid.uuid4())
+                point_id = str(uuid.uuid4())
             
-            doc_ids.append(doc_id)
+            # UUID 형식 검증
+            if not is_valid_uuid(point_id):
+                raise ValueError(f"유효하지 않은 UUID 형식: {point_id}")
             
-            # 문서 내용에서 임베딩 생성
-            vector = await self.generate_embedding(document.content)
+            doc_ids.append(point_id)
             
             # 메타데이터 준비
             metadata_dict = document.metadata.dict(exclude_none=True) if document.metadata else {}
@@ -134,10 +233,11 @@ class QdrantService:
             # Qdrant 포인트 준비
             points.append(
                 PointStruct(
-                    id=doc_id,
-                    vector=vector,
+                    id=point_id,  # DB UID = Qdrant point ID
+                    vector=vectors[idx],
                     payload={
-                        "content": document.content,
+                        "title": document.title,
+                        "embedding_text": embedding_texts[idx],
                         **metadata_dict
                     }
                 )
@@ -510,6 +610,98 @@ class QdrantService:
         except Exception as e:
             print(f"컬렉션 정보 조회 중 오류 발생: {e}")
             return {}
+
+    async def generate_embedding(self, text: str) -> List[float]:
+        """텍스트에서 임베딩 벡터 생성 (캐싱 지원)"""
+        try:
+            # LangChain CacheBackedEmbeddings를 사용하여 자동 캐싱
+            embedding_vector = await self.embeddings.aembed_query(text)
+            
+            # 벡터 크기 검증
+            if len(embedding_vector) != self.vector_size:
+                raise ValueError(f"임베딩 벡터 크기가 예상과 다릅니다. 예상: {self.vector_size}, 실제: {len(embedding_vector)}")
+            
+            return embedding_vector
+            
+        except Exception as e:
+            print(f"임베딩 생성 중 오류 발생: {e}")
+            return [0.0] * self.vector_size
+    
+    async def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """여러 텍스트에서 임베딩 벡터 일괄 생성 (캐싱 지원)"""
+        try:
+            # LangChain CacheBackedEmbeddings의 배치 메서드 사용
+            embedding_vectors = await self.embeddings.aembed_documents(texts)
+            
+            # 각 벡터 크기 검증
+            for i, vector in enumerate(embedding_vectors):
+                if len(vector) != self.vector_size:
+                    print(f"경고: {i}번째 임베딩 벡터 크기가 예상과 다릅니다. 예상: {self.vector_size}, 실제: {len(vector)}")
+                    embedding_vectors[i] = [0.0] * self.vector_size
+            
+            return embedding_vectors
+            
+        except Exception as e:
+            print(f"배치 임베딩 생성 중 오류 발생: {e}")
+            return [[0.0] * self.vector_size for _ in texts]
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """캐시 통계 정보 조회"""
+        try:
+            cache_dir = "./cache/embeddings"
+            if not os.path.exists(cache_dir):
+                return {"cache_files": 0, "total_size_mb": 0}
+            
+            files = os.listdir(cache_dir)
+            total_size = sum(os.path.getsize(os.path.join(cache_dir, f)) for f in files)
+            
+            return {
+                "cache_files": len(files),
+                "total_size_mb": round(total_size / (1024 * 1024), 2),
+                "cache_directory": cache_dir
+            }
+        except Exception as e:
+            print(f"캐시 통계 조회 중 오류: {e}")
+            return {"error": str(e)}
+
+    def clear_cache(self) -> Dict[str, Any]:
+        """캐시 삭제 (테스트 후 정리용)"""
+        try:
+            cache_dir = "./cache/embeddings"
+            if os.path.exists(cache_dir):
+                import shutil
+                shutil.rmtree(cache_dir)
+                os.makedirs(cache_dir, exist_ok=True)
+                return {"success": True, "message": "캐시가 성공적으로 삭제되었습니다."}
+            else:
+                return {"success": True, "message": "삭제할 캐시가 없습니다."}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+
+def is_valid_uuid(uuid_string: str) -> bool:
+    """UUID 형식이 유효한지 확인"""
+    uuid_pattern = re.compile(
+        r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+        re.IGNORECASE
+    )
+    return bool(uuid_pattern.match(uuid_string))
+
+def convert_to_uuid_if_needed(point_id: str) -> str:
+    """필요시 point ID를 UUID 형식으로 변환"""
+    if is_valid_uuid(point_id):
+        return point_id
+    
+    # 숫자인 경우 UUID 형식으로 변환
+    if point_id.isdigit():
+        int_id = int(point_id)
+        hex_str = f"{int_id:032x}"
+        return f"{hex_str[:8]}-{hex_str[8:12]}-{hex_str[12:16]}-{hex_str[16:20]}-{hex_str[20:32]}"
+    
+    # 그 외의 경우 해시를 사용하여 UUID 형식 생성
+    import hashlib
+    hash_bytes = hashlib.md5(point_id.encode()).hexdigest()
+    return f"{hash_bytes[:8]}-{hash_bytes[8:12]}-{hash_bytes[12:16]}-{hash_bytes[16:20]}-{hash_bytes[20:32]}"
 
 
 # 싱글톤으로 서비스 인스턴스 제공

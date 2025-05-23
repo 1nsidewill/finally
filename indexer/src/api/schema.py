@@ -4,27 +4,30 @@ from pydantic import BaseModel, Field, model_validator
 
 class DocumentMetadata(BaseModel):
     """문서의 메타데이터를 정의하는 모델"""
-    id: Optional[str] = None
-    title: Optional[str] = None
-    source: Optional[str] = None
-    author: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-    url: Optional[str] = None
-    category: Optional[str] = None
-    tags: Optional[List[str]] = None
-    extra: Optional[Dict[str, Any]] = None
+    id: Optional[str] = Field(None, description="DB의 고유 식별자(UID)")
+    content: Optional[str] = Field(None, description="매물 전체 설명 텍스트")
+    image_url: Optional[str] = Field(None, description="이미지 주소")
+    last_modified_at: Optional[str] = Field(None, description="마지막 수정 시간 (ISO8601 형식)")
+    model_name: Optional[str] = Field(None, description="모델명 (예: R3, R6 등)")
+    brand: Optional[str] = Field(None, description="브랜드 (예: Yamaha, Honda 등)")
+    category: Optional[str] = Field(None, description="장르 (예: sports, naked 등)")
+    price: Optional[int] = Field(None, description="가격 (단위: 원)")
+    km: Optional[int] = Field(None, description="주행거리 (단위: km)")
+    year: Optional[int] = Field(None, description="연식 (연도)")
+    color: Optional[str] = Field(None, description="색상")
+    extra: Optional[Dict[str, Any]] = Field(None, description="추가 메타데이터")
 
 
 class DocumentBase(BaseModel):
     """문서의 기본 정보를 정의하는 모델"""
-    content: str = Field(..., description="문서의 내용")
+    title: str = Field(..., description="매물 제목")
     metadata: Optional[DocumentMetadata] = Field(default_factory=DocumentMetadata, description="문서의 메타데이터")
 
 
 class DocumentCreate(DocumentBase):
     """문서 생성 요청 모델"""
     id: Optional[str] = Field(None, description="문서 ID (지정하지 않으면 자동 생성)")
+    embedding_text: Optional[str] = Field(None, description="임베딩 생성에 사용될 텍스트 (지정하지 않으면 자동 생성)")
 
 
 class DocumentCreateBatch(BaseModel):
