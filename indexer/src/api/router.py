@@ -381,3 +381,50 @@ async def count_documents(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"문서 수 조회 중 오류가 발생했습니다: {str(e)}"
         )
+    
+
+# src/api/router.py에 추가
+from src.services.test_data_loader import run_test_data_loading
+
+# 테스트 데이터 로드 엔드포인트
+@api_router.post("/test/load-data", response_model=APIResponse)
+async def load_test_data(current_user=Depends(get_current_user)):
+    """PostgreSQL에서 테스트 데이터를 가져와 Qdrant에 로드하는 테스트 엔드포인트"""
+    try:
+        count = await run_test_data_loading()
+        return APIResponse(
+            success=True,
+            message=f"테스트 데이터 로드 완료: {count}개 문서 삽입됨",
+            data={"count": count}
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"테스트 데이터 로드 중 오류 발생: {str(e)}"
+        )
+
+@api_router.get("/cache/stats", response_model=APIResponse)
+async def get_cache_stats():
+    """임베딩 캐시 통계 조회"""
+    try:
+        stats = qdrant_service.get_cache_stats()
+        return APIResponse(
+            success=True,
+            message="캐시 통계 조회 성공",
+            data=stats
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"캐시 통계 조회 실패: {str(e)}")
+
+@api_router.delete("/cache/clear", response_model=APIResponse)
+async def clear_cache():
+    """임베딩 캐시 삭제 (테스트 후 정리용)"""
+    try:
+        result = qdrant_service.clear_cache()
+        return APIResponse(
+            success=result["success"],
+            message=result.get("message", "캐시 삭제 완료"),
+            data=result
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"캐시 삭제 실패: {str(e)}")
