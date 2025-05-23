@@ -1,4 +1,4 @@
-version: "3.8"
+# version: "3.8"
 
 services:
   traefik:
@@ -60,6 +60,20 @@ services:
         target: /qdrant/config/production.yaml
     volumes:
       - /app/qdrant_data:/qdrant/storage
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    #restart: always
+    container_name: frontend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.front.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.front.entrypoints=web"
+      - "traefik.http.services.front.loadbalancer.server.port=3000"
+    networks:
+      - app-network
 
 configs:
   qdrant_config:

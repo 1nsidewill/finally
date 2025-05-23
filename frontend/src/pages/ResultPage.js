@@ -33,6 +33,11 @@ export default function ResultPage() {
             backgroundColor: '#fff',
             boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
           }}>
+            {/* 🔽 랭크 표시 */}
+            <div style={{ fontWeight: 'bold', fontSize: '1rem', marginBottom: '0.5rem', color: '#007bff' }}>
+              🏆 {item.rank}위
+            </div>
+            
             <img
               src={item.img_url}
               alt={item.title}
