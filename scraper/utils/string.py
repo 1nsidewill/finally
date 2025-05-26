@@ -1,8 +1,8 @@
 import re
 
-def parse_korean_money(text: str) -> int:
+def parse_korean_number(text: str) -> int:
     def clean_input(text):
-        return re.sub(r'[^0-9억만천백십]', '', text)
+        return re.sub(r'[^0-9억만천백십]', '', str(text))
 
     def promote_to_higher_unit(values: list, higher_unit: list):
         last_increase_idx = -1
@@ -44,12 +44,12 @@ def parse_korean_money(text: str) -> int:
         list2 = after_uk.rsplit('만', 1)
         man_section = list2[0]
         after_man = list2[1]
+        man_section = man_section.replace('만', '')
+        has_man = parse_small_units(man_section) if man_section else []
+        has_il = parse_small_units(after_man) if after_man else []
     else:
-        man_section = after_uk
-        after_man = ''
-    man_section = man_section.replace('만', '')
-    has_man = parse_small_units(man_section) if man_section else []
-    has_il = parse_small_units(after_man) if after_man else []
+        has_man = []
+        has_il = parse_small_units(after_uk) if after_uk else []
 
     # 3. 단위 끌어올리기
     promote_to_higher_unit(has_il, has_man)
@@ -69,7 +69,7 @@ def parse_korean_money(text: str) -> int:
         total += sum(has_il)
 
     # 5. 4자리 이하일 경우 10,000 곱하기 (금액 보정)
-    if 0 < total <= 9999:
+    if 0 < total <= 9999 and not text.isdigit():
         total *= 10000
 
     return total
