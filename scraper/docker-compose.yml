@@ -1,0 +1,10 @@
+services:
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: finally-scraper
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
