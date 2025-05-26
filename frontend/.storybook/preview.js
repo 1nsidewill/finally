@@ -1,5 +1,4 @@
 // .storybook/preview.js
-import '../src/styles/global.css'; // 전역 스타일
 import React from 'react';
 
 export const parameters = {
