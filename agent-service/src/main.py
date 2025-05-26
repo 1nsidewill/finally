@@ -6,8 +6,6 @@ from src.api.router import api_router
 from src.auth.router import router as auth_router
 from fastapi.middleware.cors import CORSMiddleware
 import os
-from src.logging_config import configure_logging
-
 
 config = get_settings()
 

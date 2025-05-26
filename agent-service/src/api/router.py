@@ -5,8 +5,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status, Depends
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_community.vectorstores import Chroma
+from langchain_qdrant import QdrantVectorStore
 from langchain.prompts import PromptTemplate
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import SearchRequest, VectorParams
+from langchain_core.documents import Document
 
 from src.config import get_settings
 from src.api.schema import PropertyItems, QueryRequest, QueryResponse
@@ -21,17 +24,63 @@ api_router = APIRouter()
 # 프롬프트 미리 로드
 PROMPTS = load_prompts()
 
-# 벡터스토어 및 리트리버 초기화
-logging.info("🔄 벡터스토어 초기화 중...")
-DATA_DIR = os.path.join(os.path.dirname(__file__), "../../data")
-docs_list = load_txt_documents(DATA_DIR)
-vectorstore = Chroma.from_documents(
-    documents=docs_list,
-    collection_name="rag-chroma",
-    embedding=OpenAIEmbeddings(openai_api_key=config.OPENAI_API_KEY, model="text-embedding-3-large"),
+# Qdrant 클라이언트 및 벡터스토어 초기화
+logging.info("🔄 Qdrant 벡터스토어 초기화 중...")
+
+# Qdrant 클라이언트 생성
+qdrant_client = QdrantClient(
+    host=config.QDRANT_HOST,
+    port=config.QDRANT_PORT,
+    grpc_port=config.QDRANT_GRPC_PORT,
+    prefer_grpc=config.QDRANT_PREFER_GRPC
 )
-retriever = vectorstore.as_retriever()
-logging.info(f"✅ 벡터스토어 초기화 완료. 문서 {len(docs_list)}개 로드됨")
+
+logging.info(f"✅ Qdrant 벡터스토어 초기화 완료. 컬렉션: {config.QDRANT_COLLECTION}")
+
+def format_qdrant_docs(docs):
+    """Qdrant 검색 결과를 포맷팅하는 함수 - 중요한 필드들 위주"""
+    formatted_docs = []
+    for doc in docs:
+        # metadata에서 중요한 정보 추출
+        metadata = doc.metadata
+        title = metadata.get('title', '')
+        url = metadata.get('url', '')
+        img_url = metadata.get('img_url', '')
+        price = metadata.get('price', '')
+        odo = metadata.get('odo', '')  # 주행거리
+        content = doc.page_content
+        
+        # 추가 정보 (참고용)
+        model_name = metadata.get('model_name', '')
+        brand = metadata.get('brand', '')
+        
+        # 가격 포맷팅
+        if price and str(price).isdigit():
+            formatted_price = f"{int(price):,}원"
+        else:
+            formatted_price = str(price) if price else "가격미정"
+        
+        # 주행거리 포맷팅
+        formatted_odo = ""
+        if odo:
+            if str(odo).isdigit():
+                formatted_odo = f"주행거리: {int(odo):,}km"
+            else:
+                formatted_odo = f"주행거리: {odo}"
+        
+        formatted_doc = f"""
+            제목: {title}
+            URL: {url if url else "URL 정보 없음"}
+            이미지: {img_url if img_url else "이미지 정보 없음"}
+            가격: {formatted_price}
+            적산/주행거리: {formatted_odo}
+            브랜드/모델: {brand} {model_name}
+            내용: {content}
+            ---
+            """
+        formatted_docs.append(formatted_doc.strip())
+    
+    return "\n\n".join(formatted_docs)
 
 @api_router.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest, user=Depends(get_current_user)):
@@ -57,7 +106,56 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
             template_format="jinja2"
         )
         
-        logging.info(f"📄 [{request_id}] 관련 문서 검색 중...")
+        logging.info(f"📄 [{request_id}] Qdrant에서 관련 문서 검색 중...")
+        
+        # Qdrant 클라이언트로 직접 검색해서 데이터 가져오기
+        # 임베딩 생성
+        embeddings = OpenAIEmbeddings(openai_api_key=config.OPENAI_API_KEY, model="text-embedding-3-large")
+        query_vector = embeddings.embed_query(request.question)
+        
+        # Qdrant 클라이언트로 직접 검색
+        qdrant_search_result = qdrant_client.search(
+            collection_name=config.QDRANT_COLLECTION,
+            query_vector=query_vector,
+            limit=12,
+            with_payload=True,  # payload 포함해서 검색
+            with_vectors=False
+        )
+        
+        # Qdrant 검색 결과를 Document 객체로 변환
+        search_results = []
+        for point in qdrant_search_result:
+            if point.payload:
+                # content를 page_content로 사용
+                page_content = point.payload.get('content', '')
+                
+                # metadata 구성 - 중요한 필드들 위주
+                metadata = {
+                    'title': point.payload.get('title', ''),
+                    'url': point.payload.get('url', ''),  # 현재 데이터에 없지만 곧 추가될 예정
+                    'img_url': point.payload.get('img_url', ''),  # 현재 데이터에 없지만 곧 추가될 예정
+                    'price': point.payload.get('price', ''),
+                    'odo': point.payload.get('odo', ''),  # 곧 추가될 예정
+                    'id': point.payload.get('id', ''),
+                    'model_name': point.payload.get('model_name', ''),
+                    'category': point.payload.get('category', ''),
+                    'brand': point.payload.get('brand', ''),
+                    'last_modified_at': point.payload.get('last_modified_at', ''),
+                    'extra': point.payload.get('extra', {}),
+                    'score': point.score
+                }
+                
+                doc = Document(page_content=page_content, metadata=metadata)
+                search_results.append(doc)
+        
+        # 검색 결과 로깅 (디버깅용)
+        logging.info(f"🔍 [{request_id}] 변환된 검색결과 수: {len(search_results)}")
+        # for i, doc in enumerate(search_results):
+        #     logging.info(f"🔍 [{request_id}] 검색결과 {i+1}: {doc.page_content[:100]}... | metadata keys: {list(doc.metadata.keys())}")
+        #     logging.info(f"🔍 [{request_id}] 검색결과 {i+1} price: {doc.metadata.get('price')}, model: {doc.metadata.get('model_name')}")
+        
+        # 검색된 문서들을 포맷팅
+        formatted_context = format_qdrant_docs(search_results)
         
         # LLM 모델 설정 및 구조화된 출력 구성
         llm_model = ChatOpenAI(
@@ -70,7 +168,7 @@ async def query(request: QueryRequest, user=Depends(get_current_user)):
         chain = (
             {
                 "input_query": lambda x: x,
-                "context": retriever | format_docs
+                "context": lambda x: formatted_context
             }
             | prompt
             | llm_model
