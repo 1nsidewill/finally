@@ -1,17 +1,76 @@
 .App {
   text-align: center;
 }
+.bg{
+  background: radial-gradient(46.52% 46.52% at 50% 50%, #87949C 0%, #FFF 100%);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -2;
+}
+.logo-wh{
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.1;
+}
+.floating-blobs {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -2;
+}
+
+.blob {
+  position: absolute;
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  opacity: 0.5;
+  filter: blur(50px);
+  animation: floatBlob 20s linear infinite;
+}
+.blue{
+  background: #B4B6CE;
+}
+.green{
+  background: #E1FBD4;
+}
+.gray{
+  background: #CCC6C7;
+}
+
+@keyframes floatBlob {
+  0% {
+    transform: translate(-50%, -50%) translate(0px, 0px);
+  }
+  25% {
+    transform: translate(-50%, -50%) translate(100px, -150px);
+  }
+  50% {
+    transform: translate(-50%, -50%) translate(-120px, 100px);
+  }
+  75% {
+    transform: translate(-50%, -50%) translate(80px, 130px);
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(0px, 0px);
+  }
+}
 
 .gnb {
-  background: black;
-  width: 100%;  
-  color: white;
-  font-weight: 600;
-  font-size: 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 0;
+  padding: 28px 20px;
+  border-bottom: 1px solid #c7c7c7;
+  margin: 0 60px;
 }
 
 .logo {
@@ -21,15 +80,20 @@
 }
 
 .menu-button {
-  font-size: 24px;
+  width: 48px;
+  height: 48px;
   background: none;
   border: none;
   cursor: pointer;
   color: white;
+  background: black;
+  border-radius: 100px;
   margin-right: 20px;
 }
 
 .material-symbols-outlined {
+  
+  font-size: 24px;
   font-variation-settings:
     'FILL' 0,
     'wght' 400,

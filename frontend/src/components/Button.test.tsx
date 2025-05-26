@@ -25,3 +25,13 @@ test("should render SmButton", () => {
   expect(screen.getByRole("button")).toHaveTextContent(/Small Button/i);
   expect(screen.getByRole("button")).toHaveStyle("backgroundColor: gray");
 });
+
+export default function Button({ label, size = "md" }) {
+  const sizeClass = `btn-${size}`;
+
+  return (
+    <button className={sizeClass}>
+      {label}
+    </button>
+  );
+}
