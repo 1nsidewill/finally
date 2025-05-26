@@ -20,4 +20,4 @@ RUN uv sync --frozen
 ENV TZ=Asia/Seoul
 
 # Run the application.
-CMD ["/app/.venv/bin/fastapi", "run", "src/main.py", "--port", "80", "--host", "0.0.0.0"]
+CMD ["/app/.venv/bin/fastapi", "run", "src/main.py", "--port", "7070", "--host", "0.0.0.0"]
