@@ -11,3 +11,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(sync.router)
+
+for route in app.routes:
+    print(f"📌 경로: {route.path} / 이름: {route.name}")
