@@ -1,0 +1,96 @@
+.input-container {
+  position: relative;
+  width: 80%;
+  max-width: 600px;
+  margin: 20px auto;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 60px 12px 20px;
+  border-radius: 30px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  outline: none;
+}
+
+.send-button {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  background-color: #ccc;
+  color: white;
+  border: none;
+  border-radius: 100%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: not-allowed;
+  transition: background-color 0.2s ease;
+}
+
+.send-button.active {
+  background-color: black;
+  cursor: pointer;
+}
+
+.send-button span {
+  font-size: 20px;
+}
+
+
+.search-input-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex: 1;
+}
+.search-input {
+    border: none;
+    background: transparent;
+    flex: 1;
+    font-family: inter;
+    color: black;
+    font-size: 1rem;
+    width: 100%;
+    text-align: center;
+}
+.search-input:focus {
+    border: none;
+    background: transparent;
+}
+.search-input:focus::placeholder {
+  opacity: 0;
+}
+[type="text"] {
+    width: 100%;
+    background: transparent;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: flex-start;
+    padding: 1em ;
+    border: none;
+    outline: none;
+    color:  black;
+    caret-color: var(--primary-pink);
+}
+
+[type="text"]::placeholder {
+    color:  black;
+    opacity: 1; 
+    transition: opacity 0.3s ease-in-out;
+}
+[type="text"]:focus {
+    outline: none; 
+}
+
+[type="text"]:not(
+    [type="image" i], [type="range" i], [type="checkbox" i], [type="radio" i]) {
+    overflow-clip-margin: 0px !important;
+    overflow: clip !important;
+}

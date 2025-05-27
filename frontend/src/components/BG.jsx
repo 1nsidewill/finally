@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import '../style/App.css';
+import './BG.css';
 
 export default function BG() {
   return (
