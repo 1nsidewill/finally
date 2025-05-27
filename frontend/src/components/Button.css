@@ -19,10 +19,16 @@
     font-size: 20px;
     color: white;
     cursor: pointer;
-    filter: drop-shadow(0px 4px 4px rgba(255, 104, 58, 0.8));
+    filter: drop-shadow(0px 4px 4px var(--primary-active60));
     backdrop-filter: blur(2.75px);
     z-index: 1;
     margin: 0 10px;
+    transition: background ease-in-out 0.3;
+}
+.search-btn:hover {
+    filter: drop-shadow(0 10px 10px var(--primary-active80));
+    width: 80px;
+    height: 80px;
 }
 .search-btn span{
     color: black;

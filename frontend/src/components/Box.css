@@ -21,7 +21,7 @@
     border-top: 1px solid var(--wh50);
     border-radius: 24px 24px 0 0;
     backdrop-filter: blur(10px);
-    padding: 20px;
+    padding: 40px 20px;
     text-align: center;
     display: flex;
     flex-direction: column;

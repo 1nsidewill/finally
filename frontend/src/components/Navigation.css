@@ -41,14 +41,16 @@
   inset: 0;
   z-index: 1000;
 }
-
+ 
 /* 메뉴 패널 */
 .mobile-menu {
   position: absolute;
   top: 0;
   right: 0;
+  width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.95);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
   color: white;
   display: flex;
   flex-direction: column;
@@ -56,19 +58,9 @@
   padding: 40px 24px;
   box-sizing: border-box;
   transition: all 0.3s ease;
+  text-align: center;
 }
 
-@media (min-width: 768px) {
-  .mobile-menu {
-    width: 50vw;
-  }
-}
-
-@media (max-width: 767px) {
-  .mobile-menu {
-    width: 100vw;
-  }
-}
 
 .close-button {
   background: none;
