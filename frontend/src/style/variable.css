@@ -1,0 +1,35 @@
+:root{
+    --primary-active:#FF683A;
+    --primary-active80:rgba(255 104 58 / 0.8);
+
+    --wh100:rgba(255 255 255 / 1);
+    --wh90: rgba(255 255 255 / 0.9);
+    --wh80: rgba(255 255 255 / 0.8);
+    --wh70: rgba(255 255 255 / 0.7);
+    --wh60: rgba(255 255 255 / 0.6);
+    --wh50: rgba(255 255 255 / 0.5);
+    --wh40: rgba(255 255 255 / 0.4);
+    --wh30: rgba(255 255 255 / 0.3);
+    --wh20: rgba(255 255 255 / 0.2);
+    --wh10: rgba(255 255 255 / 0.1);
+
+    --bl100: #000000;  
+    --bl90:  #0a0a0a;
+    --bl80:  #262626;
+    --bl70:  #404040;
+    --bl60:  #525252;
+    --bl50:  #737373;
+    --bl40:  #a3a3a3;
+    --bl30:  #cfcfcf;
+    --bl20:  #e0e0e0;
+    --bl10:  #f5f5f5; 
+
+    --semantic-warning-txt: #FF5A65;
+    --semantic-warning-btn: rgba(255 90 101 / 0.2);
+    --semantic-success-txt: #05C168;
+    --semantic-success-btn: rgba(5 193 104 / 0.2);
+    --semantic-info100: #3A9BFE;
+    --semantic-info70: rgba(58 155 254 / 0.7);
+    --semantic-info10: rgba(58 155 254 / 0.1);
+    --semantic-info-bg:  #2f364b;
+}

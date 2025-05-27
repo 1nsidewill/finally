@@ -1,0 +1,53 @@
+.bg{
+  background: radial-gradient(46.52% 46.52% at 50% 50%, #87949C 0%, #FFF 100%);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -2;
+  overflow: hidden;
+}
+.logo-wh{
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.1;
+}
+.floating-blobs {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -2;
+}
+
+.blob {
+  position: absolute;
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  opacity: 0.5;
+  filter: blur(50px);
+  animation: floatBlob 20s linear infinite;
+}
+.blue{
+  background: #B4B6CE;
+}
+.green{
+  background: #E1FBD4;
+}
+.gray{
+  background: #CCC6C7;
+}
+
+@keyframes floatBlob {
+  0%   { transform: translate(0px, 0px); }
+  25%  { transform: translate(100px, -150px); }
+  50%  { transform: translate(-120px, 100px); }
+  75%  { transform: translate(80px, 130px); }
+  100% { transform: translate(0px, 0px); }
+}

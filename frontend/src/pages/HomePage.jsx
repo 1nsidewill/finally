@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import GNB from '../components/GNB';
+import GNB from '../components/Navigation';
 import BG from '../components/BG';
-import Input from '../components/Input';
+import SearchInput, { Input as ChatInput } from '../components/Form';
+import BottomSheet from '../components/Box';
+import { getRecommendation } from '../api/query';
+
 
 export default function HomePage() {
   const [inputValue, setInputValue] = useState('');
@@ -10,11 +13,21 @@ export default function HomePage() {
   const menuRef = useRef(null);
   const navigate = useNavigate();
 
-  const handleSubmit = () => {
-    if (inputValue.trim()) {
-      navigate('/result', { state: { question: inputValue } });
-    }
-  };
+  const handleSubmit = async () => {
+  if (!inputValue.trim()) return;
+
+  try {
+    const result = await getRecommendation(inputValue);
+    navigate('/result', {
+      state: {
+        question: inputValue,
+        result, // ✅ API 응답 결과 같이 넘기기
+      },
+    });
+  } catch (error) {
+    alert(error.message); // ❗ 또는 setError 상태로 UI에 표시
+  }
+};
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -32,11 +45,13 @@ export default function HomePage() {
     <div className="App">
       <BG />
       <GNB />
-      <Input
+      <SearchInput
         inputValue={inputValue}
         setInputValue={setInputValue}
         handleSubmit={handleSubmit}
       />
+      <BottomSheet />
+
     </div>
   );
 }
