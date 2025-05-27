@@ -17,7 +17,7 @@ COPY . /app
 # 4. .venv 생성 및 패키지 설치 (pyproject.toml 기반)
 RUN uv sync --frozen --no-cache
 
-RUN uv pip install fastapi sqlalchemy uvicorn httpx asyncpg python-dotenv
+#RUN uv pip install fastapi sqlalchemy uvicorn httpx asyncpg python-dotenv
 
 # 5. FastAPI 앱 실행 (uvicorn은 .venv 안에 설치됨)
 CMD ["/app/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
