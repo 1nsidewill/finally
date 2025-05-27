@@ -3,8 +3,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: finally-scraper
-    ports:
-      - "8000:8000"
+    container_name: scraper
+    #ports:
+    #  - "8000:8000"
+    networks:
+      - npm-net
     env_file:
       - .env
+
+networks:
+  npm-net:
+    name: npm-net
+    external: true
