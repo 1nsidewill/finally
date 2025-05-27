@@ -20,4 +20,4 @@ RUN uv sync --frozen --no-cache
 RUN uv pip install fastapi sqlalchemy uvicorn httpx asyncpg python-dotenv
 
 # 5. FastAPI 앱 실행 (uvicorn은 .venv 안에 설치됨)
-CMD ["/app/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]

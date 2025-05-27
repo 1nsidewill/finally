@@ -10,8 +10,11 @@ from utils.string import parse_korean_number
 from utils.time import safe_parse_datetime
 
 from core.logger import setup_logger
+from functools import wraps
+
 
 logger = setup_logger(__name__)  # 현재 파일명 기준 이름 지정
+
 
 async def fetch_categories(code: str, db: AsyncSession):
     try:

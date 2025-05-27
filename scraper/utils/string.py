@@ -69,7 +69,7 @@ def parse_korean_number(text: str) -> int:
         total += sum(has_il)
 
     # 5. 4자리 이하일 경우 10,000 곱하기 (금액 보정)
-    if 0 < total <= 9999 and not text.isdigit():
+    if 0 < total <= 9999:
         total *= 10000
 
     return total
