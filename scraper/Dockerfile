@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y \
     g++ \
     curl \
     cron \
-    tzdata
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. TZ 설정
