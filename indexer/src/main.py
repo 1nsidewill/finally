@@ -23,7 +23,6 @@ else:
         title=config.app_name,
         root_path="/indexer"
     )
-
 # CORS 설정 추가
 app.add_middleware(
     CORSMiddleware,
@@ -34,7 +33,8 @@ app.add_middleware(
         "http://127.0.0.1:8000",
         "http://10.178.0.2:3000",
         "http://10.178.0.2:8000",
-        "http://10.178.0.2:80"
+        "http://10.178.0.2:80",
+        "https://scraper.k-dev.me"
     ],
     allow_credentials=True,
     allow_methods=["*"],
