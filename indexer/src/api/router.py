@@ -1,6 +1,6 @@
 import os
 
-from fastapi import APIRouter, HTTPException, status, Depends, Request, Query
+from fastapi import APIRouter, HTTPException, status, Request, Query
 from fastapi.responses import JSONResponse
 from typing import List, Dict, Any, Optional
 
@@ -17,7 +17,6 @@ from src.api.schema import (
     SearchQuery,
     SearchVector
 )
-from src.auth.user_service import get_current_user
 from src.config import get_settings
 from src.services.qdrant_service import qdrant_service
 
@@ -27,7 +26,6 @@ api_router = APIRouter()
 @api_router.post("/documents", response_model=DocumentSingleResponse)
 async def create_document(
     document: DocumentCreate, 
-    current_user=Depends(get_current_user),
     wait: bool = Query(True, description="작업 완료 후 응답할지 여부")
 ):
     """문서 생성 및 벡터 저장 엔드포인트"""
@@ -63,7 +61,6 @@ async def create_document(
 @api_router.post("/documents/batch", response_model=DocumentListResponse)
 async def batch_create_documents(
     batch_request: DocumentCreateBatch, 
-    current_user=Depends(get_current_user),
     wait: bool = Query(True, description="작업 완료 후 응답할지 여부")
 ):
     """여러 문서 일괄 생성 및 벡터 저장 엔드포인트"""
@@ -101,7 +98,6 @@ async def batch_create_documents(
 @api_router.get("/documents/{doc_id}", response_model=DocumentSingleResponse)
 async def get_document(
     doc_id: str, 
-    current_user=Depends(get_current_user),
     with_vectors: bool = Query(False, description="벡터 데이터 포함 여부")
 ):
     """문서 ID로 단일 문서 조회"""
@@ -139,7 +135,6 @@ async def get_document(
 
 @api_router.get("/documents", response_model=DocumentListResponse)
 async def list_documents(
-    current_user=Depends(get_current_user),
     offset: int = Query(0, description="시작 인덱스", ge=0),
     limit: int = Query(10, description="문서 수", ge=1, le=100),
     with_vectors: bool = Query(False, description="벡터 데이터 포함 여부")
@@ -184,7 +179,6 @@ async def list_documents(
 async def update_document(
     doc_id: str, 
     update_data: DocumentUpdate, 
-    current_user=Depends(get_current_user),
     wait: bool = Query(True, description="작업 완료 후 응답할지 여부")
 ):
     """문서 업데이트 (내용 또는 메타데이터)"""
@@ -224,7 +218,6 @@ async def update_document(
 @api_router.delete("/documents/{doc_id}", response_model=OperationResponse)
 async def delete_document(
     doc_id: str, 
-    current_user=Depends(get_current_user),
     wait: bool = Query(True, description="작업 완료 후 응답할지 여부")
 ):
     """문서 삭제"""
@@ -264,7 +257,6 @@ async def delete_document(
 @api_router.post("/documents/batch-delete", response_model=OperationResponse)
 async def batch_delete_documents(
     delete_request: BatchDocumentDelete, 
-    current_user=Depends(get_current_user),
     wait: bool = Query(True, description="작업 완료 후 응답할지 여부")
 ):
     """여러 문서 일괄 삭제"""
@@ -293,8 +285,7 @@ async def batch_delete_documents(
 
 @api_router.post("/search/text", response_model=DocumentListResponse)
 async def search_by_text(
-    query: SearchQuery,
-    current_user=Depends(get_current_user)
+    query: SearchQuery
 ):
     """텍스트 기반 벡터 유사도 검색"""
     try:
@@ -329,8 +320,7 @@ async def search_by_text(
 
 @api_router.post("/search/vector", response_model=DocumentListResponse)
 async def search_by_vector(
-    query: SearchVector,
-    current_user=Depends(get_current_user)
+    query: SearchVector
 ):
     """벡터 기반 유사도 검색"""
     try:
@@ -364,9 +354,7 @@ async def search_by_vector(
         )
 
 @api_router.get("/documents/count", response_model=APIResponse)
-async def count_documents(
-    current_user=Depends(get_current_user)
-):
+async def count_documents():
     """컬렉션 내 문서 수 조회"""
     try:
         count = await qdrant_service.count_documents()
@@ -388,7 +376,7 @@ from src.services.test_data_loader import run_test_data_loading
 
 # 테스트 데이터 로드 엔드포인트
 @api_router.post("/test/load-data", response_model=APIResponse)
-async def load_test_data(current_user=Depends(get_current_user)):
+async def load_test_data():
     """PostgreSQL에서 테스트 데이터를 가져와 Qdrant에 로드하는 테스트 엔드포인트"""
     try:
         count = await run_test_data_loading()
