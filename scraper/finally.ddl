@@ -1,4 +1,4 @@
-DROP TABLE IF EXISTS files;
+DROP TABLE IF EXISTS file;
 DROP TABLE IF EXISTS product;
 DROP TABLE IF EXISTS category;
 DROP TABLE IF EXISTS log;
@@ -52,6 +52,7 @@ CREATE TABLE log (
 CREATE TABLE product (
     uid          bigserial PRIMARY KEY,
     provider_uid bigint NOT NULL,
+    pid          varchar(60) NOT NULL,
     status       smallint NOT NULL,
     title        varchar(200) NOT NULL,
     brand        varchar(30),
@@ -76,14 +77,14 @@ CREATE TABLE category (
     title        varchar(200) NOT NULL,
     id           varchar(100) NOT NULL,
     depth        smallint,
-    "order"      smallint,
+    "order"      integer,
     created_dt   timestamp DEFAULT CURRENT_TIMESTAMP,
     updated_dt   timestamp DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (provider_uid) REFERENCES provider(uid) ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- 6. files 테이블
-CREATE TABLE files (
+CREATE TABLE file (
     uid          bigserial PRIMARY KEY,
     provider_uid bigint,
     category_uid bigint,
@@ -139,6 +140,7 @@ COMMENT ON COLUMN log.updated_dt IS '수정일시';
 -- product
 COMMENT ON COLUMN product.uid IS '자동증가 기본키';
 COMMENT ON COLUMN product.provider_uid IS 'provider 테이블 FK';
+COMMENT ON COLUMN product.pid IS '상품 고유 번호';
 COMMENT ON COLUMN product.status IS '1: 판매중, 2: 예약중, 3: 판매완료, 9: 삭제';
 COMMENT ON COLUMN product.title IS '제목';
 COMMENT ON COLUMN product.brand IS '브랜드 명';
@@ -155,15 +157,15 @@ COMMENT ON COLUMN product.created_dt IS '생성일시';
 COMMENT ON COLUMN product.updated_dt IS '수정일시';
 
 -- files
-COMMENT ON COLUMN files.uid IS '자동증가 기본키';
-COMMENT ON COLUMN files.provider_uid IS 'provider 테이블 FK (nullable)';
-COMMENT ON COLUMN files.category_uid IS 'category 테이블 FK (nullable)';
-COMMENT ON COLUMN files.product_uid IS 'product 테이블 FK (nullable)';
-COMMENT ON COLUMN files.url IS '파일의 전체 URL 또는 접근 주소';
-COMMENT ON COLUMN files.path IS '서버 저장 상대경로(또는 절대경로)';
-COMMENT ON COLUMN files.count IS '파일 수량(기본값 0)';
-COMMENT ON COLUMN files.created_dt IS '생성일시';
-COMMENT ON COLUMN files.updated_dt IS '수정일시';
+COMMENT ON COLUMN file.uid IS '자동증가 기본키';
+COMMENT ON COLUMN file.provider_uid IS 'provider 테이블 FK (nullable)';
+COMMENT ON COLUMN file.category_uid IS 'category 테이블 FK (nullable)';
+COMMENT ON COLUMN file.product_uid IS 'product 테이블 FK (nullable)';
+COMMENT ON COLUMN file.url IS '파일의 전체 URL 또는 접근 주소';
+COMMENT ON COLUMN file.path IS '서버 저장 상대경로(또는 절대경로)';
+COMMENT ON COLUMN file.count IS '파일 수량(기본값 0)';
+COMMENT ON COLUMN file.created_dt IS '생성일시';
+COMMENT ON COLUMN file.updated_dt IS '수정일시';
 
 
 -- category

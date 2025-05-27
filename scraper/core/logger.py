@@ -37,3 +37,4 @@ def setup_logger(name: str) -> logging.Logger:
 # 외부 라이브러리 로그 억제
 logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
+
