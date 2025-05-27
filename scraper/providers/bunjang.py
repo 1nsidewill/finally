@@ -36,6 +36,7 @@ async def fetch_categories(code: str, db: AsyncSession):
         logger.exception("fetch_categories 에러")
         return []
 
+
 async def fetch_bunjang_categories(provider: Provider, db: AsyncSession):
     try:
         # 1. BUNJANG 분기 처리
@@ -73,6 +74,7 @@ async def fetch_bunjang_categories(provider: Provider, db: AsyncSession):
         await db.rollback()
         logger.exception("카테고리 동기화 실패")
 
+
 async def fetch_products(keyword: str, category: str, page: int = 0, accumulated: list[dict[str, str]] = None) -> list[dict[str, str]]:
     if accumulated is None:
         accumulated = []
@@ -108,18 +110,25 @@ async def fetch_products(keyword: str, category: str, page: int = 0, accumulated
         logger.exception(f"❌ {keyword} 페이지 {page} 에러 발생")
         return accumulated
 
-async def fetch_product_detail(pid: str):
+
+async def fetch_product_detail(pid: str, db: AsyncSession):
     try:
         url = f"https://api.bunjang.co.kr/api/pms/v3/products-detail/{pid}?viewerUid=-1"
         async with httpx.AsyncClient() as client:
             res = await client.get(url)
-            res.raise_for_status()
+            if res.status_code != 200:
+                logger.warning(f"pid={pid} 상태코드={res.status_code} - 상품이 존재하지 않음(또는 비공개 등)")
+                await delete_product_by_pid(pid, db)
+                return None
             return res.json().get("data", {}).get("product")
     except Exception as e:
         logger.exception("에러 발생")
+        # 네트워크 등 예외 상황에서도 삭제 처리
+        await delete_product_by_pid(pid, db)
         return None
 
-async def upsert_product(db: AsyncSession, detail_data: dict):
+
+async def upsert_product(detail_data: dict, db: AsyncSession):
     try:
         pid = str(detail_data["pid"])
         provider_uid = 1
@@ -215,12 +224,29 @@ async def upsert_product(db: AsyncSession, detail_data: dict):
     except Exception:
         logger.exception("상품 upsert 중 에러 발생")
 
-async def delete_product_by_code(db: AsyncSession, product_code):
+
+async def delete_product_by_pid(pid: str, db: AsyncSession):
     try:
-        await db.execute(delete(Product).where(Product.product_code == product_code))
-        await db.commit()
+        stmt = select(Product).where(Product.pid == pid)
+        result = await db.execute(stmt)
+        product = result.scalar_one_or_none()
+
+        if product:
+            product.status = 9  # 삭제 상태
+            await db.commit()
+            logger.info(f"pid={pid} 상품 status=9(삭제)로 변경 완료")
+            return True
+        else:
+            logger.warning(f"pid={pid}에 해당하는 상품이 존재하지 않습니다.")
+            return False
+
     except Exception as e:
-        logger.exception("에러 발생")
+        logger.exception("delete_product_by_pid 에러 발생")
+        await db.rollback()
+        return False
+
+
+
 
 def extract_year_and_odo(options: list[dict]) -> tuple[Optional[int], Optional[int]]:
     year = None
