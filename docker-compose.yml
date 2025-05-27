@@ -74,6 +74,27 @@ services:
       - "traefik.http.services.front.loadbalancer.server.port=3000"
     networks:
       - app-network
+      
+  indexer:
+    build:
+      context: ./indexer
+      dockerfile: Dockerfile
+    container_name: indexer
+    env_file:
+      - ./indexer/.env.prod
+    environment:
+      - ENVIRONMENT=prod
+    ports:
+      - "7070:7070"
+    expose:
+      - "7070"
+    networks:
+      - app-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: 10
 
 configs:
   qdrant_config:
