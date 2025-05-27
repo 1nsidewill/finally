@@ -11,7 +11,7 @@ from core.database import get_db, AsyncSessionLocal
 from models import Provider, Product
 from providers import bunjang
 from core.logger import setup_logger
-from providers.bunjang import fetch_products, fetch_product_detail, upsert_product
+from providers.bunjang import fetch_products, fetch_product_detail, upsert_product, delete_product_by_pid
 from utils.string import parse_korean_number
 from utils.time import normalize_datetime, safe_parse_datetime
 
@@ -26,18 +26,6 @@ processed_count: int = 0             # 현재까지 처리된 수
 is_running: bool = False             # 실행 중 여부
 pid_lock = asyncio.Lock()             # 동시성 제어를 위한 lock
 
-@router.post("/test")
-async def test(
-    data: str = Query("13500000", description="숫자")
-):
-    return {"value": parse_korean_number(data)}
-
-@router.post("/select")
-async def select_products(db: AsyncSession = Depends(get_db)):
-    stmt = select(Product)
-    result = await db.execute(stmt)
-    products = result.scalars().all()
-    return {"products": len(products)}
 
 @router.post("/categories")
 async def sync_categories(
@@ -85,9 +73,13 @@ async def sync_products(
 
     async def sync_detail_and_save(pid: str):
         async with AsyncSessionLocal() as db:
-            detail = await fetch_product_detail(pid)
+            detail = await fetch_product_detail(pid, db)
             if detail:
-                await upsert_product(db, detail)
+                await upsert_product(detail, db)
+
+    async def sync_update_deleted(pid: str):
+        async with AsyncSessionLocal() as db:
+            await delete_product_by_pid(pid, db)
 
     async def run_keyword_sync():
         global is_running, processed_count
@@ -114,40 +106,42 @@ async def sync_products(
             tasks = [asyncio.create_task(worker(i)) for i in range(batch_size)]
             await asyncio.gather(*tasks)
 
-            # 1. tuple로 변환해서 set으로 중복 제거
-            unique_set = set((item["pid"], item["updated_dt"]) for item in all_product_pids)
-            # 2. 다시 dict로 변환
-            all_product_pids = [{"pid": pid, "updated_dt": updated_dt} for pid, updated_dt in unique_set]
-
-            logger.info(f"✅ pid 수집 완료. 총 {len(all_product_pids)}개")
-
             # 1. DB 조회
-            dbProducts = select(Product)
+            dbProducts = select(Product).where(Product.status != 9)
             dbResult = await db.execute(dbProducts)
             dbProductsList = dbResult.scalars().all()
+            dbList = [{"pid": p.pid, "updated_dt": p.updated_dt} for p in dbProductsList]
 
-            # 2. DB에서 조회된 값 리스트화 (a)
-            dbList = [{"pid": p.pid, "updated_dt": normalize_datetime(p.updated_dt)} for p in dbProductsList]
-            logger.info(f"✅ 기존 db에 있는 데이터 조회 {len(dbList)}개")
+            # safe_parse_datetime 등으로 날짜를 비교 가능한 형태로 통일해야 함
+            src_set = set((item["pid"], safe_parse_datetime(item["updated_dt"])) for item in all_product_pids)
+            db_set = set((item["pid"], normalize_datetime(item["updated_dt"])) for item in dbList)
 
-            db_set = set((item["pid"], item["updated_dt"]) for item in dbList)
-            all_product_pids = [
-                item for item in all_product_pids
-                if (item["pid"], safe_parse_datetime(item["updated_dt"])) not in db_set
-            ]
-            print("db_set sample:", list(db_set)[:1])
-            print(all_product_pids)
-            logger.info(f"✅ DB 중복 제거 후 신규 수집된 pid 수: {len(all_product_pids)}")
+            # 1. 신규/업데이트 대상 (all_product_pids에만 있음)
+            only_src = src_set - db_set
+            # 2. 삭제 대상 (DB에만 있음)
+            only_db = db_set - src_set
+
+            logger.info(f"✅ 신규/업데이트 대상: {len(only_src)}개, 삭제 대상: {len(only_db)}개")
 
             # 2. 상세 정보 upsert
-            pids = list(all_product_pids)
-            pid_chunks = [pids[i:i+batch_size] for i in range(0, len(pids), batch_size)]
-            for chunk in pid_chunks:
+            srcs = list(only_src)
+            src_chunks = [srcs[i:i+batch_size] for i in range(0, len(srcs), batch_size)]
+            for chunk in src_chunks:
                 detail_tasks = [
-                    asyncio.create_task(sync_detail_and_save(pid["pid"]))
-                    for pid in chunk
+                    asyncio.create_task(sync_detail_and_save(pid))
+                    for pid, updated_dt in chunk
                 ]
                 await asyncio.gather(*detail_tasks)
+
+            # 3. 삭제 처리도 batch로 실행
+            dbs = list(only_db)
+            db_chunks = [dbs[i:i+batch_size] for i in range(0, len(dbs), batch_size)]
+            for chunk in db_chunks:
+                delete_tasks = [
+                    asyncio.create_task(sync_update_deleted(pid))
+                    for pid, updated_dt in chunk
+                ]
+                await asyncio.gather(*delete_tasks)
 
             logger.info("✅ 상세 upsert 완료.")
 
