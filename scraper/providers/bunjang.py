@@ -7,10 +7,12 @@ from sqlalchemy import select, update, delete, and_
 from models import Provider, Product, Category, File
 
 from utils.string import parse_korean_number
-from utils.time import safe_parse_datetime
+from utils.time import safe_parse_datetime, safe_parse_unix_timestamp
 
 from core.logger import setup_logger
 from functools import wraps
+
+from datetime import datetime, timezone
 
 
 logger = setup_logger(__name__)  # 현재 파일명 기준 이름 지정
@@ -33,6 +35,7 @@ async def fetch_categories(code: str, db: AsyncSession):
     except Exception as e:
         logger.exception("fetch_categories 에러")
         return []
+
 
 async def fetch_bunjang_categories(provider: Provider, db: AsyncSession):
     try:
@@ -71,7 +74,8 @@ async def fetch_bunjang_categories(provider: Provider, db: AsyncSession):
         await db.rollback()
         logger.exception("카테고리 동기화 실패")
 
-async def fetch_products(keyword: str, category: str, page: int = 0, accumulated: list[str] = None) -> list[str]:
+
+async def fetch_products(keyword: str, category: str, page: int = 0, accumulated: list[dict[str, str]] = None) -> list[dict[str, str]]:
     if accumulated is None:
         accumulated = []
 
@@ -88,32 +92,43 @@ async def fetch_products(keyword: str, category: str, page: int = 0, accumulated
             if not items:
                 return accumulated
 
-            # pid만 추출
-            current_pids = [str(item["pid"]) for item in items if "pid" in item]
-            accumulated.extend(current_pids)
+            for item in items:
+                pid = item.get("pid")
+                updated_dt = safe_parse_unix_timestamp(item.get("update_time"))  # or "updated_time", "updateDate" 등 실제 키에 맞게 수정
+
+                if pid and updated_dt:
+                    accumulated.append({
+                        "pid": str(pid),
+                        "updated_dt": str(updated_dt)
+                    })
+
             print(f"fetch_products ==== keyword: {keyword}, category: {category}, page: {page}, 갯수: {len(accumulated)}")
 
             # 다음 페이지 재귀 호출
             return await fetch_products(keyword, category, page + 1, accumulated)
-
-
     except Exception:
         logger.exception(f"❌ {keyword} 페이지 {page} 에러 발생")
         return accumulated
 
-async def fetch_product_detail(pid: str):
+
+async def fetch_product_detail(pid: str, db: AsyncSession):
     try:
         url = f"https://api.bunjang.co.kr/api/pms/v3/products-detail/{pid}?viewerUid=-1"
         async with httpx.AsyncClient() as client:
             res = await client.get(url)
-            res.raise_for_status()
-            print(res.json())
+            if res.status_code != 200:
+                logger.warning(f"pid={pid} 상태코드={res.status_code} - 상품이 존재하지 않음(또는 비공개 등)")
+                await delete_product_by_pid(pid, db)
+                return None
             return res.json().get("data", {}).get("product")
     except Exception as e:
         logger.exception("에러 발생")
+        # 네트워크 등 예외 상황에서도 삭제 처리
+        await delete_product_by_pid(pid, db)
         return None
 
-async def upsert_product(db: AsyncSession, detail_data: dict):
+
+async def upsert_product(detail_data: dict, db: AsyncSession):
     try:
         pid = str(detail_data["pid"])
         provider_uid = 1
@@ -140,38 +155,39 @@ async def upsert_product(db: AsyncSession, detail_data: dict):
         image_count = detail_data.get("imageCount", 0)
 
         if existing:
-            # 필드 업데이트 (uid, pid 제외하고 모두 업데이트)
-            existing.title = title
-            existing.content = content
-            existing.price = price
-            existing.location = location
-            existing.updated_dt = updated_dt
-            existing.brand = brand
-            existing.year = year
-            existing.odo = odo
-            existing.category = category
-            existing.status = status
-            existing.rmk = detail_data
+            if existing.updated_dt != updated_dt:
+                # 필드 업데이트 (uid, pid 제외하고 모두 업데이트)
+                existing.title = title
+                existing.content = content
+                existing.price = price
+                existing.location = location
+                existing.updated_dt = updated_dt
+                existing.brand = brand
+                existing.year = year
+                existing.odo = odo
+                existing.category = category
+                existing.status = status
+                existing.rmk = detail_data
 
-            # 기존 이미지 확인 및 교체
-            file_stmt = select(File).where(File.product_uid == existing.uid)
-            file_result = await db.execute(file_stmt)
-            existing_file = file_result.scalar_one_or_none()
+                # 기존 이미지 확인 및 교체
+                file_stmt = select(File).where(File.product_uid == existing.uid)
+                file_result = await db.execute(file_stmt)
+                existing_file = file_result.scalar_one_or_none()
 
-            if existing_file:
-                if existing_file.url != image_url:
-                    await db.execute(delete(File).where(File.product_uid == existing.uid))
+                if existing_file:
+                    if existing_file.url != image_url:
+                        await db.execute(delete(File).where(File.product_uid == existing.uid))
+                        db.add(File(
+                            product_uid=existing.uid,
+                            url=image_url,
+                            count=image_count
+                        ))
+                elif image_url:
                     db.add(File(
                         product_uid=existing.uid,
                         url=image_url,
                         count=image_count
                     ))
-            elif image_url:
-                db.add(File(
-                    product_uid=existing.uid,
-                    url=image_url,
-                    count=image_count
-                ))
         else:
             # 3. 새 Product 생성
             product = Product(
@@ -208,12 +224,29 @@ async def upsert_product(db: AsyncSession, detail_data: dict):
     except Exception:
         logger.exception("상품 upsert 중 에러 발생")
 
-async def delete_product_by_code(db: AsyncSession, product_code):
+
+async def delete_product_by_pid(pid: str, db: AsyncSession):
     try:
-        await db.execute(delete(Product).where(Product.product_code == product_code))
-        await db.commit()
+        stmt = select(Product).where(Product.pid == pid)
+        result = await db.execute(stmt)
+        product = result.scalar_one_or_none()
+
+        if product:
+            product.status = 9  # 삭제 상태
+            await db.commit()
+            logger.info(f"pid={pid} 상품 status=9(삭제)로 변경 완료")
+            return True
+        else:
+            logger.warning(f"pid={pid}에 해당하는 상품이 존재하지 않습니다.")
+            return False
+
     except Exception as e:
-        logger.exception("에러 발생")
+        logger.exception("delete_product_by_pid 에러 발생")
+        await db.rollback()
+        return False
+
+
+
 
 def extract_year_and_odo(options: list[dict]) -> tuple[Optional[int], Optional[int]]:
     year = None
