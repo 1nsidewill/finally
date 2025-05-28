@@ -44,7 +44,7 @@ return (
       className="search-input"
       value={value}
       onChange={(e) => setValue(e.target.value)}
-      placeholder="test 당신이 원하는 매물을 찾을 때까지"
+      placeholder="당신이 원하는 매물을 찾을 때까지"
     />
 
     <div className="homebtn">

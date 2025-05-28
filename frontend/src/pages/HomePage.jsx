@@ -4,7 +4,7 @@ import GNB from '../components/Navigation';
 import BG from '../components/BG';
 import SearchInput, { Input as ChatInput } from '../components/Form';
 import BottomSheet from '../components/Box';
-import { getRecommendation } from '../api/query';
+import { getRecommendation } from '../api/auth';
 
 
 export default function HomePage() {

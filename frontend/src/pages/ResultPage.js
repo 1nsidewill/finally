@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { getRecommendation } from '../api/query';
+import { getRecommendation } from '../api/auth';
 
 export default function ResultPage() {
   const location = useLocation();
