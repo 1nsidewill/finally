@@ -1,10 +1,44 @@
+[type="text"] {
+    width: 100%;
+    background: transparent;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: flex-start;
+    padding: 1em ;
+    border: none;
+    outline: none;
+    color:  black;
+    caret-color: var(--primary-pink);
+}
+
+[type="text"]::placeholder {
+  color:  var(--bl10);
+  opacity: 1; 
+  transition: opacity 0.3s ease-in-out;
+}
+[type="text"]:focus {
+  color:  black;
+  outline: none; 
+}
+
+[type="text"]:not(
+    [type="image" i], [type="range" i], [type="checkbox" i], [type="radio" i]) {
+    overflow-clip-margin: 0px !important;
+    overflow: clip !important;
+}
+
 .input-container {
   position: relative;
   width: 80%;
   max-width: 600px;
   margin: 20px auto;
 }
-
+/* input{
+  border: 1px solid var(--bl10);
+  border-radius: 8px;
+  width: 100%;
+  padding: 1rem;
+} */
 .input {
   width: 100%;
   padding: 12px 60px 12px 20px;
@@ -60,6 +94,11 @@
     width: 100%;
     text-align: center;
 }
+.search-input[type="text"]::placeholder {
+  color: black;
+  opacity: 1; 
+  transition: opacity 0.3s ease-in-out;
+}
 .search-input:focus {
     border: none;
     background: transparent;
@@ -67,30 +106,14 @@
 .search-input:focus::placeholder {
   opacity: 0;
 }
-[type="text"] {
-    width: 100%;
-    background: transparent;
-    box-sizing: border-box;
-    display: flex;
-    justify-content: flex-start;
-    padding: 1em ;
-    border: none;
-    outline: none;
-    color:  black;
-    caret-color: var(--primary-pink);
-}
 
-[type="text"]::placeholder {
-    color:  black;
-    opacity: 1; 
-    transition: opacity 0.3s ease-in-out;
+.loginform{
+  width: 353px;
+  margin: auto;
+  padding-top: 120px;
 }
-[type="text"]:focus {
-    outline: none; 
-}
-
-[type="text"]:not(
-    [type="image" i], [type="range" i], [type="checkbox" i], [type="radio" i]) {
-    overflow-clip-margin: 0px !important;
-    overflow: clip !important;
+/* 아이디 */
+.idInput{
+  position: relative;
+  margin-bottom: 16px;
 }
