@@ -19,7 +19,10 @@ export default function GNB() {
 
   return (
     <header className="gnb">
-      <img src="/logo-bl.svg" alt="logo" className="logo" />
+      <button onClick={() => navigate('/')}>
+        <img src="/logo-bl.svg" alt="logo" className="logo" />
+      </button>
+      
       <button onClick={() => setMenuOpen(!menuOpen)} className="menu-button">
         <span className="material-symbols-outlined">
           {menuOpen ? 'close' : 'menu'}

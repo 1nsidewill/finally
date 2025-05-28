@@ -1,3 +1,15 @@
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+}
+.Primary{
+    background-color: var(--primary-active);
+}
+
+
+
 .homebtn{
     background: black;
     width: 170px;
