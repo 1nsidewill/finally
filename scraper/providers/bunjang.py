@@ -168,6 +168,7 @@ async def upsert_product(detail_data: dict, db: AsyncSession):
                 existing.category = category
                 existing.status = status
                 existing.rmk = detail_data
+                existing.is_conversion = false
 
                 # 기존 이미지 확인 및 교체
                 file_stmt = select(File).where(File.product_uid == existing.uid)
@@ -203,6 +204,7 @@ async def upsert_product(detail_data: dict, db: AsyncSession):
                 odo=odo,
                 category=category,
                 rmk=detail_data,
+                is_conversion=false,
                 created_dt=created_dt,
                 updated_dt=updated_dt
             )
@@ -233,11 +235,12 @@ async def delete_product_by_pid(pid: str, db: AsyncSession):
 
         if product:
             product.status = 9  # 삭제 상태
+            product.is_conversion = false
             await db.commit()
-            logger.info(f"pid={pid} 상품 status=9(삭제)로 변경 완료")
+            print(f"pid={pid} 상품 status=9(삭제)로 변경 완료")
             return True
         else:
-            logger.warning(f"pid={pid}에 해당하는 상품이 존재하지 않습니다.")
+            print(f"pid={pid}에 해당하는 상품이 존재하지 않습니다.")
             return False
 
     except Exception as e:
