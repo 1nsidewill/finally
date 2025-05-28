@@ -74,6 +74,7 @@ services:
       - "traefik.http.services.front.loadbalancer.server.port=3000"
     networks:
       - app-network
+
       
   indexer:
     build:

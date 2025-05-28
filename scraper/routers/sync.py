@@ -8,11 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import JSONResponse
 
 from core.database import get_db, AsyncSessionLocal
-from models import Provider
+from models import Provider, Product
 from providers import bunjang
 from core.logger import setup_logger
-from providers.bunjang import fetch_products, fetch_product_detail, upsert_product
+from providers.bunjang import fetch_products, fetch_product_detail, upsert_product, delete_product_by_pid
 from utils.string import parse_korean_number
+from utils.time import normalize_datetime, safe_parse_datetime
 
 logger = setup_logger(__name__)  # 현재 파일명 기준 이름 지정
 
@@ -23,16 +24,10 @@ total_keywords: int = 0               # 전체 키워드 수
 batch_size: int = 5
 processed_count: int = 0             # 현재까지 처리된 수
 is_running: bool = False             # 실행 중 여부
-all_product_pids: Set[str] = set()    # pid 중복 제거용 set
 pid_lock = asyncio.Lock()             # 동시성 제어를 위한 lock
 
-@router.post("/test")
-async def test(
-    data: str = Query("13500000", description="숫자")
-):
-    return {"value": parse_korean_number(data)}
 
-@router.post("/sync_categories")
+@router.post("/categories")
 async def sync_categories(
     code: str = Query(..., description="공급자 코드"),
     db: AsyncSession = Depends(get_db)
@@ -40,14 +35,15 @@ async def sync_categories(
     await bunjang.fetch_categories(code, db)
     return {"message": f"{code} categories synced."}
 
-@router.post("/sync_products")
+@router.post("/products")
 async def sync_products(
     code: str = Query("BUNJANG", description="공급자 코드"),
     # keyword: Optional[str] = Query(None, description="키워드"),
     category: Optional[str] = Query("750800", description="카테고리"),
     db: AsyncSession = Depends(get_db)
 ):
-    global keyword_queue, total_keywords, processed_count, is_running, all_product_pids
+    global keyword_queue, total_keywords, processed_count, is_running
+    all_product_pids: list[dict[str, str]] = []    # pid 중복 제거용 list
 
     if is_running:
         return JSONResponse(
@@ -77,12 +73,17 @@ async def sync_products(
 
     async def sync_detail_and_save(pid: str):
         async with AsyncSessionLocal() as db:
-            detail = await fetch_product_detail(pid)
+            detail = await fetch_product_detail(pid, db)
             if detail:
-                await upsert_product(db, detail)
+                await upsert_product(detail, db)
+
+    async def sync_update_deleted(pid: str):
+        async with AsyncSessionLocal() as db:
+            await delete_product_by_pid(pid, db)
 
     async def run_keyword_sync():
-        global is_running, processed_count, all_product_pids
+        global is_running, processed_count
+        nonlocal all_product_pids
         is_running = True
         try:
             logger.info("🚀 키워드 동기화 시작")
@@ -97,24 +98,50 @@ async def sync_products(
                         break
                     try:
                         if not provider or provider.code == "BUNJANG":
-                            all_product_pids.update(await fetch_products(keyword=keyword, category=category))
+                            all_product_pids.extend(await fetch_products(keyword=keyword, category=category))
                             processed_count += 1
                     except Exception:
                         logger.exception(f"[{keyword}] ❌ 작업자 {worker_id} 에러 발생")
 
             tasks = [asyncio.create_task(worker(i)) for i in range(batch_size)]
             await asyncio.gather(*tasks)
-            logger.info(f"✅ pid 수집 완료. 총 {len(all_product_pids)}개")
+
+            # 1. DB 조회
+            dbProducts = select(Product).where(Product.status != 9)
+            dbResult = await db.execute(dbProducts)
+            dbProductsList = dbResult.scalars().all()
+            dbList = [{"pid": p.pid, "updated_dt": p.updated_dt} for p in dbProductsList]
+
+            # safe_parse_datetime 등으로 날짜를 비교 가능한 형태로 통일해야 함
+            src_set = set((item["pid"], safe_parse_datetime(item["updated_dt"])) for item in all_product_pids)
+            db_set = set((item["pid"], normalize_datetime(item["updated_dt"])) for item in dbList)
+
+            # 1. 신규/업데이트 대상 (all_product_pids에만 있음)
+            only_src = src_set - db_set
+            # 2. 삭제 대상 (DB에만 있음)
+            only_db = db_set - src_set
+
+            logger.info(f"✅ 신규/업데이트 대상: {len(only_src)}개, 삭제 대상: {len(only_db)}개")
 
             # 2. 상세 정보 upsert
-            pids = list(all_product_pids)
-            pid_chunks = [pids[i:i+batch_size] for i in range(0, len(pids), batch_size)]
-            for chunk in pid_chunks:
+            srcs = list(only_src)
+            src_chunks = [srcs[i:i+batch_size] for i in range(0, len(srcs), batch_size)]
+            for chunk in src_chunks:
                 detail_tasks = [
                     asyncio.create_task(sync_detail_and_save(pid))
-                    for pid in chunk
+                    for pid, updated_dt in chunk
                 ]
                 await asyncio.gather(*detail_tasks)
+
+            # 3. 삭제 처리도 batch로 실행
+            dbs = list(only_db)
+            db_chunks = [dbs[i:i+batch_size] for i in range(0, len(dbs), batch_size)]
+            for chunk in db_chunks:
+                delete_tasks = [
+                    asyncio.create_task(sync_update_deleted(pid))
+                    for pid, updated_dt in chunk
+                ]
+                await asyncio.gather(*delete_tasks)
 
             logger.info("✅ 상세 upsert 완료.")
 

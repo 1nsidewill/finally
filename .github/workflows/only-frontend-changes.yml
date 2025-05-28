@@ -1,0 +1,23 @@
+name: frontend 변경 적용
+
+on:
+  push:
+    paths:
+      - 'frontend/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH & deploy to ${{ secrets.SERVER_HOST }} 
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT }}
+          username: ${{ secrets.SERVER_USER}}
+          key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+          script: |
+            cd /app/finally
+            git pull
+            docker compose up -d --build frontend
+
