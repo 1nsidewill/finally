@@ -10,6 +10,7 @@
     color: white;
     border-radius: 8px;
     font-weight: 500;
+    box-sizing: border-box;
 }
 .Primary{
     background-color: var(--primary-active);
@@ -18,8 +19,29 @@
     background-color: var(--primary-hover);
 }
 
+/* 텍스트 버튼 */
+.txtbtn-wrap{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap:0.5rem;
+    color: var(--bl10);
+    margin: 1rem 0;
+}
+.txtbtn{
+    cursor: pointer;
+    font-size: 15px;
+    text-align: center;
+    font-weight: 400;
+}
+.txtgray{
+    color: var(--bl60);
+}
+.txtgray:hover{
+    color: var(--bl30);
+}
 
-
+/* 메인페이지 버튼 */
 .homebtn{
     background: black;
     width: 170px;

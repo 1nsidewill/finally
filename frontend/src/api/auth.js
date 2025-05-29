@@ -7,7 +7,7 @@ export async function login(username, password) {
     body: JSON.stringify({ username, password }),
   });
 
-  if (!response.ok) throw new Error('로그인 실패');
+  if (!response.ok) throw new Error('허억!! 로그인 실패..');
 
   const data = await response.json();
   localStorage.setItem('token', data.access_token);
