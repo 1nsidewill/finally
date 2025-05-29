@@ -32,6 +32,5 @@ COPY supervisord.conf /etc/supervisord.conf
 
 # 8. FastAPI 앱 실행 (uvicorn은 .venv 안에 설치됨)
 #CMD ["/app/.venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
-
 CMD ["/app/.venv/bin/supervisord", "-c", "/etc/supervisord.conf"]
 

@@ -151,5 +151,5 @@ async def sync_products(
             is_running = False
 
     asyncio.create_task(run_keyword_sync())
-    logger.info(f"total_keywords: {total_keywords}, keyword_queue: {keyword_queue}")
+    #logger.info(f"total_keywords: {total_keywords}, keyword_queue: {keyword_queue}")
     return {"message": f"{total_keywords}개 키워드 백그라운드 처리 및 상세 upsert 시작"}
