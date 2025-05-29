@@ -65,6 +65,7 @@ CREATE TABLE product (
     year         int,
     rmk          jsonb,
     "desc"       text,
+    is_conversion boolean NOT NULL DEFAULT false,
     created_dt   timestamp DEFAULT CURRENT_TIMESTAMP,
     updated_dt   timestamp DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (provider_uid) REFERENCES provider(uid) ON DELETE CASCADE ON UPDATE CASCADE
@@ -153,6 +154,7 @@ COMMENT ON COLUMN product.odo IS '주행거리';
 COMMENT ON COLUMN product.year IS '연식';
 COMMENT ON COLUMN product.rmk IS '비고/추가정보(JSON)';
 COMMENT ON COLUMN product."desc" IS '비고/상세내용';
+COMMENT ON COLUMN product.is_conversion IS 'true: 변환 완료, false: 변환 전'
 COMMENT ON COLUMN product.created_dt IS '생성일시';
 COMMENT ON COLUMN product.updated_dt IS '수정일시';
 
