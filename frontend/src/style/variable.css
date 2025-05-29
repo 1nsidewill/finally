@@ -4,7 +4,7 @@
     --primary-active60:rgba(255 104 58 / 0.6);
     --primary-active40:rgba(255 104 58 / 0.4);
     --primary-active20:rgba(255 104 58 / 0.2);
-    --primary-hover:#FD3F07;
+    --primary-hover:#FF4611;
 
     --bg:#F5F5F5;
 
@@ -20,16 +20,17 @@
     --wh10: rgba(255 255 255 / 0.1);
   
     --bl90:  #333333;
+    --bl60:  #403F3F;
+    --bl50:  #525151;
+    --bl40:  #666;
     --bl30:  #8E8E8E;
     --bl20:  #AAAAAA;
     --bl10:  #C7C7C7; 
 
-    --semantic-warning-txt: #FF5A65;
-    --semantic-warning-btn: rgba(255 90 101 / 0.2);
-    --semantic-success-txt: #05C168;
-    --semantic-success-btn: rgba(5 193 104 / 0.2);
+    --semantic-warning100: #FF5A65;
+    --semantic-warning50: rgba(255 90 101 / 0.2);
+    --semantic-success100: #05C168;
+    --semantic-success50: rgba(5 193 104 / 0.2);
     --semantic-info100: #3A9BFE;
-    --semantic-info70: rgba(58 155 254 / 0.7);
-    --semantic-info10: rgba(58 155 254 / 0.1);
-    --semantic-info-bg:  #2f364b;
+    --semantic-info50: rgba(58 155 254 / 0.7);
 }

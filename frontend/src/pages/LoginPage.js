@@ -10,24 +10,42 @@ export default function LoginForm() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState('');
+  const [isError, setIsError] = useState(false);
+
+  // 자동 로그인 상태 유지
+  const [isAutoLogin, setIsAutoLogin] = useState(false);
 
   // 자동 로그인 상태 유지
   useEffect(() => {
     const savedUsername = localStorage.getItem('savedUsername');
-    if (savedUsername) setUsername(savedUsername);
+    const autoLogin = localStorage.getItem('savedAutoLogin') === 'true';
+
+    if (savedUsername && autoLogin) {
+      setUsername(savedUsername);
+      setIsAutoLogin(true);
+    }
   }, []);
 
   const handleLogin = async () => {
     try {
       const res = await login(username, password);
-      localStorage.setItem('savedUsername', username);
-      alert('로그인 성공!');
-      setMessage('로그인 성공!');
+
+      if (isAutoLogin) {
+        localStorage.setItem('savedUsername', username);
+        localStorage.setItem('savedAutoLogin', 'true');
+      } else {
+        localStorage.removeItem('savedUsername');
+        localStorage.removeItem('savedAutoLogin');
+      }
+
+      setIsError(false);
+      navigate('/');
     } catch (err) {
-      alert('로그인 실패!');
-      setMessage('헉!!! 로그인 실패!');
+      setMessage(err.message || '로그인 실패');
+      setIsError(true);
     }
   };
+
 
   return (
     <div>
@@ -65,10 +83,21 @@ export default function LoginForm() {
         </div>
 
         {/* 로그인 상태 유지 */}
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
-          <input type="checkbox" checked readOnly style={{ marginRight: '0.5rem' }} />
-          <label>로그인 상태 유지</label>
+        <div className='login-checkbox'>
+          <label class="custom-checkbox">
+            <input type="checkbox" 
+              checked={isAutoLogin}
+              onChange={(e) => setIsAutoLogin(e.target.checked)}/>
+            <span class="checkmark"></span>
+            로그인 상태 유지
+          </label>
         </div>
+
+
+        {/* 로그인 결과 메시지 */}
+        {message && (
+          <p className={`validation ${isError ? 'txtwarning' : ''}`}>{message}</p>
+        )}
 
         {/* 로그인 버튼 */}
         <button className='btn Primary'
@@ -77,16 +106,13 @@ export default function LoginForm() {
           로그인
         </button>
 
-        {/* 로그인 결과 메시지 */}
-        <p style={{ textAlign: 'center', marginTop: '1rem' }}>{message}</p>
-
         {/* 하단 링크 */}
-        <div style={{ marginTop: '1rem', textAlign: 'center', fontSize: '0.9rem', color: '#ccc' }}>
-          <span style={{ cursor: 'pointer', marginRight: '0.5rem' }} onClick={() => navigate('/find-password')}>비밀번호 찾기</span>
+        <div className='txtbtn-wrap'>
+          <span className='txtbtn txtgray' onClick={() => navigate('/find-password')}>비밀번호 찾기</span>
           |
-          <span style={{ cursor: 'pointer', margin: '0 0.5rem' }} onClick={() => navigate('/find-id')}>아이디 찾기</span>
+          <span className='txtbtn txtgray' onClick={() => navigate('/find-id')}>아이디 찾기</span>
           |
-          <span style={{ cursor: 'pointer', marginLeft: '0.5rem' }} onClick={() => navigate('/signup')}>회원가입</span>
+          <span className='txtbtn txtgray' onClick={() => navigate('/signup')}>회원가입</span>
         </div>
       </div>
       
