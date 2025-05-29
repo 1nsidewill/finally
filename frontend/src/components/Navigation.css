@@ -81,3 +81,11 @@
   cursor: pointer;
   width: 100%;
 }
+
+
+@media (max-width: 768px) {
+  .gnb {
+    padding: 16px;
+    margin: 0 0;
+  }
+}

@@ -34,29 +34,34 @@ export default function LoginForm() {
       <GNB />
       <div className='loginform'>
         {/* 아이디 */}
-        <div className='idInput'>
-          <input
+        <div className='input-container'>
+          <input className='input'
             type="text"
             value={username}
             placeholder="아이디"
             onChange={(e) => setUsername(e.target.value)}
-            style={{ width: '100%', padding: '1rem', borderRadius: '10px', border: '1px solid #999' }}
           />
         </div>
 
         {/* 비밀번호 */}
-        <div style={{ position: 'relative', marginBottom: '1rem' }}>
-          <input
+        <div className='input-container'>
+          <input className='input'
             type={showPassword ? 'text' : 'password'}
             value={password}
             placeholder="비밀번호"
             onChange={(e) => setPassword(e.target.value)}
-            style={{ width: '100%', padding: '1rem', borderRadius: '10px', border: '1px solid #999' }}
           />
-          <span
-            style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer' }}
+          <button
+            type="button"
+            className="password-toggle"
             onClick={() => setShowPassword(!showPassword)}
-          >{showPassword ? '🙈' : '👁️'}</span>
+          >
+            <img
+              className="eye-icon"
+              src={showPassword ? '/ico-eye-off.svg' : '/ico-eye.svg'}
+              alt={showPassword ? 'Hide password' : 'Show password'}
+            />
+          </button>
         </div>
 
         {/* 로그인 상태 유지 */}
@@ -66,9 +71,8 @@ export default function LoginForm() {
         </div>
 
         {/* 로그인 버튼 */}
-        <button className='btn round Primary size-l ui-button ui-corner-all ui-widget'
+        <button className='btn Primary'
           onClick={handleLogin}
-          style={{ width: '100%', padding: '1rem', background: '#ff5a2c', color: '#fff', borderRadius: '12px', border: 'none', fontWeight: 'bold' }}
         >
           로그인
         </button>
