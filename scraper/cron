@@ -1,1 +1,1 @@
-*/10 * * * * curl -X POST http://localhost/sync/products
+0 * * * * curl -X POST http://localhost/sync/products
