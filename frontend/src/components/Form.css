@@ -1,4 +1,4 @@
-[type="text"] {
+[type="text"], [type="password"] {
     width: 100%;
     background: transparent;
     box-sizing: border-box;
@@ -8,20 +8,23 @@
     border: none;
     outline: none;
     color:  black;
-    caret-color: var(--primary-pink);
+    caret-color: var(--primary-active);
+    font-family:'Pretendard', sans-serif;
+    font-size: 16px;
+    cursor: pointer;
 }
 
-[type="text"]::placeholder {
+[type="text"], [type="password"]::placeholder {
   color:  var(--bl10);
   opacity: 1; 
   transition: opacity 0.3s ease-in-out;
 }
-[type="text"]:focus {
+[type="text"], [type="password"]:focus {
   color:  black;
   outline: none; 
 }
 
-[type="text"]:not(
+[type="text"], [type="password"]:not(
     [type="image" i], [type="range" i], [type="checkbox" i], [type="radio" i]) {
     overflow-clip-margin: 0px !important;
     overflow: clip !important;
@@ -29,23 +32,11 @@
 
 .input-container {
   position: relative;
-  width: 80%;
-  max-width: 600px;
-  margin: 20px auto;
+  margin-bottom: 1rem;
 }
-/* input{
+.input {
   border: 1px solid var(--bl10);
   border-radius: 8px;
-  width: 100%;
-  padding: 1rem;
-} */
-.input {
-  width: 100%;
-  padding: 12px 60px 12px 20px;
-  border-radius: 30px;
-  border: 1px solid #ccc;
-  font-size: 16px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   outline: none;
 }
 
@@ -112,8 +103,10 @@
   margin: auto;
   padding-top: 120px;
 }
-/* 아이디 */
-.idInput{
-  position: relative;
-  margin-bottom: 16px;
+.password-toggle{
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
 }
