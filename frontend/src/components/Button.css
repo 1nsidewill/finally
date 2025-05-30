@@ -34,6 +34,9 @@
     text-align: center;
     font-weight: 400;
 }
+.underline{
+    text-decoration: underline;
+}
 .txtgray{
     color: var(--bl60);
 }
@@ -43,8 +46,8 @@
 .txtPrimary{
     color: var(--primary-active);
 }
-.underline{
-    text-decoration: underline;
+.txtPrimary:hover{
+    color: var(--primary-hover);
 }
 
 

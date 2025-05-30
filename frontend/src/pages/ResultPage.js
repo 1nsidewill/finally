@@ -22,10 +22,12 @@ export default function ResultPage() {
     <div>
       <GNB />
       <p className='item-header'>
-        당신이 찾던 {question}와 관련된 매물이에요
+        당신이 찾던 <strong className='txtPrimary'>{ question}</strong>와 관련된 오토바이를 추천드려요.
       </p>
 
-      {error && <p style={{ color: 'red',textAlign:'center' }}>{error}</p>}
+      {error && 
+        <div className="custom-alert">{error}</div>
+      }
 
       <div className='item-wrap'>
         {Array.isArray(results) ? results.map((item, i) => (
