@@ -8,11 +8,13 @@
     text-align: center;
     color: var(--bl90);
     font-weight: 600;
+    padding: 0 20px;
 }
 .item-wrap{
   margin: 0 60px;
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   flex-basis: 300px;
   gap: 16px;
   margin-top: 40px;
@@ -38,7 +40,7 @@
     width: 300px;
     height: 240px;
     object-fit: cover;
-    background-color: var(--bl10);
+    background-color: rgba(177, 177, 177, 0.6);
     box-sizing: border-box;
     border-radius: 16px 16px 0 0 ;
 }

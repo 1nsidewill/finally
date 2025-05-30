@@ -1,0 +1,61 @@
+.skeleton {
+  background-color: #e2e5e7;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0.5),
+    rgba(255, 255, 255, 0)
+  );
+  background-size: 40px 100%;
+  background-repeat: no-repeat;
+  background-position: left -40px top 0;
+  animation: shine 1.2s ease-in-out infinite;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.skeleton-box {
+  height: 140px;
+  width: 100%;
+}
+
+@keyframes shine {
+  to {
+    background-position: right -40px top 0;
+  }
+}
+
+.item-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+
+.custom-alert {
+  position: fixed;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff0f0;
+  border: 1px solid #ff6666;
+  color: #c00;
+  padding: 20px 24px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  z-index: 9999;
+  animation: fadeIn 0.3s ease;
+  text-align: center;
+  max-width: 300px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -60%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
