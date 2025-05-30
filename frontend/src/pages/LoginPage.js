@@ -18,10 +18,12 @@ export default function LoginForm() {
   // 자동 로그인 상태 유지
   useEffect(() => {
     const savedUsername = localStorage.getItem('savedUsername');
+    const savedPassword = localStorage.getItem('savedPassword');
     const autoLogin = localStorage.getItem('savedAutoLogin') === 'true';
 
-    if (savedUsername && autoLogin) {
+    if (savedUsername && savedPassword && autoLogin) {
       setUsername(savedUsername);
+      setPassword(savedPassword);
       setIsAutoLogin(true);
     }
   }, []);
@@ -32,9 +34,11 @@ export default function LoginForm() {
 
       if (isAutoLogin) {
         localStorage.setItem('savedUsername', username);
+        localStorage.setItem('savedPassword', password);
         localStorage.setItem('savedAutoLogin', 'true');
       } else {
         localStorage.removeItem('savedUsername');
+        localStorage.removeItem('savedPassword');
         localStorage.removeItem('savedAutoLogin');
       }
 

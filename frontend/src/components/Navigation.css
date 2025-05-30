@@ -1,3 +1,5 @@
+/* 유저 흐름 제어하는 요소 Navigation, Tab ,Filter, nav, tab, gnb, lnb, filter, toggle */
+
 .gnb {
   display: flex;
   justify-content: space-between;

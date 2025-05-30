@@ -14,6 +14,12 @@ export default function SearchInput() {
       navigate('/result', { state: { question: value } });
     }
   };
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
+
   return (
     <div className="bottom-sheet">
       <input
@@ -22,6 +28,7 @@ export default function SearchInput() {
         className="search-input"
         value={value}
         onChange={(e) => setValue(e.target.value)}
+        onKeyDown={handleKeyDown} 
         placeholder="당신이 원하는 매물을 찾을 때까지"
       />
 
