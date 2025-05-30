@@ -40,6 +40,13 @@
 .txtgray:hover{
     color: var(--bl30);
 }
+.txtPrimary{
+    color: var(--primary-active);
+}
+.underline{
+    text-decoration: underline;
+}
+
 
 /* 메인페이지 버튼 */
 .homebtn{
@@ -80,4 +87,18 @@
 }
 .bike-btn span, .preference-btn span{
     color: white;
+}
+
+
+.like-btn{
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    z-index: 3;
+    background: white;
+    border-radius: 50%;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
