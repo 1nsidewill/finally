@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     QDRANT_GRPC_PORT: int
     QDRANT_PREFER_GRPC: bool
     QDRANT_COLLECTION: str
+    QDRANT_USE_MEMORY: bool  # 인메모리 모드 사용 여부 (테스트/개발용)
     VECTOR_SIZE: int # 임베딩 벡터 차원 수
 
     secret_key: str
