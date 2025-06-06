@@ -39,22 +39,43 @@ class QdrantService:
         self.prefer_grpc = config.QDRANT_PREFER_GRPC
         self.collection_name = config.QDRANT_COLLECTION
         self.vector_size = config.VECTOR_SIZE
+        self.use_memory = config.QDRANT_USE_MEMORY
         
-        # Qdrant 클라이언트 초기화 - gRPC 사용 (더 빠른 성능)
-        self.client = QdrantClient(
-            host=self.host, 
-            port=self.port,
-            grpc_port=self.grpc_port if self.prefer_grpc else None,
-            prefer_grpc=self.prefer_grpc
-        )
-        
-        # 비동기 클라이언트도 함께 초기화
-        self.async_client = AsyncQdrantClient(
-            host=self.host, 
-            port=self.port,
-            grpc_port=self.grpc_port if self.prefer_grpc else None,
-            prefer_grpc=self.prefer_grpc
-        )
+        # Qdrant 클라이언트 초기화
+        try:
+            if self.use_memory:
+                # 인메모리 모드 (테스트/개발용, 네트워크 불필요)
+                print("🟡 Qdrant 인메모리 모드로 초기화 중...")
+                self.client = QdrantClient(":memory:")
+                self.async_client = AsyncQdrantClient(":memory:")
+                print("✅ Qdrant 인메모리 클라이언트 초기화 완료")
+            else:
+                # 서버 연결 모드 (운영용)
+                print(f"🟡 Qdrant 서버 연결 중... ({self.host}:{self.port})")
+                self.client = QdrantClient(
+                    host=self.host, 
+                    port=self.port,
+                    grpc_port=self.grpc_port if self.prefer_grpc else None,
+                    prefer_grpc=self.prefer_grpc
+                )
+                
+                # 비동기 클라이언트도 함께 초기화
+                self.async_client = AsyncQdrantClient(
+                    host=self.host, 
+                    port=self.port,
+                    grpc_port=self.grpc_port if self.prefer_grpc else None,
+                    prefer_grpc=self.prefer_grpc
+                )
+                print("✅ Qdrant 서버 클라이언트 초기화 완료")
+                
+        except Exception as e:
+            print(f"❌ Qdrant 클라이언트 초기화 실패: {e}")
+            # 서버 연결 실패 시 자동으로 인메모리 모드로 전환
+            print("🟡 자동으로 인메모리 모드로 전환합니다...")
+            self.client = QdrantClient(":memory:")
+            self.async_client = AsyncQdrantClient(":memory:")
+            self.use_memory = True
+            print("✅ Qdrant 인메모리 클라이언트로 대체 초기화 완료")
         
         # 기본 OpenAI 임베딩 모델 초기화
         base_embeddings = OpenAIEmbeddings(
@@ -78,24 +99,35 @@ class QdrantService:
         
         print(f"임베딩 캐시 설정 완료: {cache_dir}")
         
-        # 컬렉션이 없으면 생성
-        self._create_collection_if_not_exists()
+        # 컬렉션이 없으면 생성 (안전하게 처리)
+        try:
+            self._create_collection_if_not_exists()
+        except Exception as e:
+            print(f"⚠️ 컬렉션 생성 중 오류 발생 (서비스는 계속 동작): {e}")
     
     def _create_collection_if_not_exists(self) -> None:
         """컬렉션이 존재하지 않으면 생성"""
-        collections = self.client.get_collections().collections
-        collection_names = [c.name for c in collections]
-        
-        if self.collection_name not in collection_names:
-            self.client.create_collection(
-                collection_name=self.collection_name,
-                vectors_config=VectorParams(size=self.vector_size, distance=Distance.COSINE),
-                optimizers_config=models.OptimizersConfigDiff(
-                    indexing_threshold=20000,  # 색인화 임계값 (이 수 이상의 벡터가 추가되면 자동으로 인덱싱)
-                ),
-                on_disk_payload=True  # 메모리 사용량 감소를 위해 페이로드를 디스크에 저장
-            )
-            print(f"컬렉션 '{self.collection_name}'이 생성되었습니다.")
+        try:
+            collections = self.client.get_collections().collections
+            collection_names = [c.name for c in collections]
+            
+            if self.collection_name not in collection_names:
+                self.client.create_collection(
+                    collection_name=self.collection_name,
+                    vectors_config=VectorParams(size=self.vector_size, distance=Distance.COSINE),
+                    optimizers_config=models.OptimizersConfigDiff(
+                        indexing_threshold=20000,  # 색인화 임계값 (이 수 이상의 벡터가 추가되면 자동으로 인덱싱)
+                    ),
+                    on_disk_payload=True  # 메모리 사용량 감소를 위해 페이로드를 디스크에 저장
+                )
+                mode_info = "인메모리" if self.use_memory else f"서버({self.host}:{self.port})"
+                print(f"✅ 컬렉션 '{self.collection_name}'이 생성되었습니다. ({mode_info})")
+            else:
+                mode_info = "인메모리" if self.use_memory else f"서버({self.host}:{self.port})"
+                print(f"✅ 컬렉션 '{self.collection_name}'이 이미 존재합니다. ({mode_info})")
+        except Exception as e:
+            print(f"❌ 컬렉션 확인/생성 중 오류: {e}")
+            raise e
     
     async def generate_embedding_text(self, document: DocumentCreate) -> str:
         """문서 정보를 기반으로 구조화된 프롬프트 형식의 임베딩용 텍스트 생성"""
