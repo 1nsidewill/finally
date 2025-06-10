@@ -29,7 +29,8 @@ pid_lock = asyncio.Lock()             # 동시성 제어를 위한 lock
 
 @router.post("/categories")
 async def sync_categories(
-    code: str = Query(..., description="공급자 코드"),
+    code: str = Query("BUNJANG", description="공급자 코드"),
+    #code: str = Query(..., description="공급자 코드"),
     db: AsyncSession = Depends(get_db)
 ):
     await bunjang.fetch_categories(code, db)

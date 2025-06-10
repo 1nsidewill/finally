@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, BigInteger, SmallInteger, Integer, TIMESTAMP, ForeignKey, Numeric, JSON
+from sqlalchemy import Column, Boolean, String, Text, BigInteger, SmallInteger, Integer, TIMESTAMP, ForeignKey, Numeric, JSON
 from sqlalchemy.orm import relationship
 from core.database import Base
 
@@ -20,6 +20,7 @@ class Product(Base):
     year = Column(Integer, comment="연식")
     rmk = Column(JSON, comment="비고/추가정보(JSON)")
     desc = Column(Text, comment="비고/상세내용")
+    is_conversion = Column(Boolean, comment="변환 여부")
     created_dt = Column(TIMESTAMP, server_default="CURRENT_TIMESTAMP", comment="생성일시")
     updated_dt = Column(TIMESTAMP, server_default="CURRENT_TIMESTAMP", comment="수정일시")
 
