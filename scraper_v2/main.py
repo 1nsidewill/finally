@@ -22,7 +22,7 @@ def scheduler():
     # scheduler.add_job(my_job, 'cron', minute='*') cron 표현식(매분 실행)
     #scheduler.add_job(sync_categories, CronTrigger.from_crontab("0 0 * * *")) # 매일 0시 0분에 1번 실행
     #####################################################################################################
-    scheduler.add_job(sync_categories, CronTrigger.from_crontab("* * * * *")) # 매일 0시 0분에 1번 실행
+    scheduler.add_job(sync_categories, CronTrigger.from_crontab("0 0 * * *")) # 매일 0시 0분에 1번 실행
     scheduler.start()
     logger.info("Scheduler Create End")
 
