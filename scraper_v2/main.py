@@ -1,4 +1,5 @@
 from modules.sync import sync_categories
+from modules.providers import bunjang
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from core.database import engine, Base
@@ -22,13 +23,17 @@ def scheduler():
     # scheduler.add_job(my_job, 'cron', minute='*') cron 표현식(매분 실행)
     #scheduler.add_job(sync_categories, CronTrigger.from_crontab("0 0 * * *")) # 매일 0시 0분에 1번 실행
     #####################################################################################################
-    scheduler.add_job(sync_categories, CronTrigger.from_crontab("0 0 * * *")) # 매일 0시 0분에 1번 실행
+    scheduler.add_job(sync_categories, CronTrigger.from_crontab("* * * * *")) # 매일 0시 0분에 1번 실행
     scheduler.start()
     logger.info("Scheduler Create End")
 
 async def main():
     logger.info("🚀 Program Start")
     await init_db()
+
+    # ✅ Provider 초기화 명시적 호출
+    await bunjang.init()
+
     scheduler()
     await asyncio.Event().wait()  # 이벤트 루프를 영원히 유지
     
