@@ -10,7 +10,17 @@ today_str = datetime.now().strftime("%Y-%m-%d")
 log_file_path = f"./logs/{today_str}.log"
 
 # 포맷터 정의
-formatter = logging.Formatter(
+class CustomFormatter(logging.Formatter):
+    def formatTime(self, record, datefmt=None):
+        dt = datetime.fromtimestamp(record.created)
+        if datefmt:
+            s = dt.strftime(datefmt)
+            if "%f" in datefmt:
+                s = s.replace("%f", f"{int(record.msecs):03d}")
+            return s
+        return super().formatTime(record, datefmt)
+
+formatter = CustomFormatter(
     "%(asctime)s [%(levelname)s] - %(filename)s/%(funcName)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S.%f"
 )

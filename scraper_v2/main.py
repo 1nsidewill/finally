@@ -1,9 +1,9 @@
-from modules.sync import sync_categories
-from modules.providers import bunjang
+from modules.sync import sync_categories, is_inits
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from core.database import engine, Base
 from core.logger import setup_logger
+from modules.providers import bunjang
 import asyncio
 
 logger = setup_logger(__name__)  # 현재 파일명 기준 이름 지정
@@ -23,7 +23,8 @@ def scheduler():
     # scheduler.add_job(my_job, 'cron', minute='*') cron 표현식(매분 실행)
     #scheduler.add_job(sync_categories, CronTrigger.from_crontab("0 0 * * *")) # 매일 0시 0분에 1번 실행
     #####################################################################################################
-    scheduler.add_job(sync_categories, CronTrigger.from_crontab("* * * * *")) # 매일 0시 0분에 1번 실행
+    scheduler.add_job(sync_categories, CronTrigger.from_crontab("0 0 * * *")) # 매일 0시 0분에 1번 실행
+    scheduler.add_job(is_inits, CronTrigger.from_crontab("* * * * *")) # 테스트용
     scheduler.start()
     logger.info("Scheduler Create End")
 

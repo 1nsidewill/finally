@@ -68,7 +68,7 @@ async def fetch_bunjang_categories(provider: Provider, db: AsyncSession):
             await db.execute(delete(Category).where(Category.provider_uid == provider.uid))
             db.add_all(parsed_categories)
             await db.commit()
-            logger.exception("카테고리 동기화 실패")
+            logger.info("카테고리 동기화 성공")
 
     except Exception as e:
         await db.rollback()
