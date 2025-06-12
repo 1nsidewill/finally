@@ -1,0 +1,7 @@
+TZ=Asia/Seoul
+
+POSTGRES_HOST=dpg-d0qlbj3e5dus739lp49g-a.singapore-postgres.render.com
+POSTGRES_PORT=5432
+POSTGRES_DB=finally_47ec
+POSTGRES_USER=finally_user
+POSTGRES_PASSWORD=4YuH6DOykb2Fxas9Jvmgnp7ZYHcBUHPb

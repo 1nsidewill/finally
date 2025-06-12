@@ -1,31 +1,20 @@
 import httpx
-import sys
 from core.logger import setup_logger
 from core.database import AsyncSessionLocal
-from sqlalchemy import select, update, delete
-from models import Provider, Category
+from sqlalchemy import delete
+from models import Category
+from modules.providers import bunjang
 
 logger = setup_logger(__name__)  # 현재 파일명 기준 이름 지정
-PROVIDER = None
-
-async def init():
-    global PROVIDER
-    logger.info("Init Provider Start")
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Provider).where(Provider.code == 'BUNJANG'))
-        provider = result.scalars().first()
-        if provider:
-            PROVIDER = provider
-            logger.info("Init Provider End")
-        else:
-            logger.info("Init Provider Fail")
-            logger.info("❌ Program Exit Now")
-            sys.exit(1)
-
 
 async def sync_categories():
+    global PROVIDER
     async with AsyncSessionLocal() as db:
         try:
+            PROVIDER = bunjang.PROVIDER
+            if not PROVIDER:
+                raise ValueError("PROVIDER Not Init")
+            
             logger.info("Sync Categories Start")
             url = f"{PROVIDER.url_api.rstrip('/')}/1/categories/list.json"
             async with httpx.AsyncClient() as client:

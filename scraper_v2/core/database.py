@@ -18,7 +18,8 @@ DATABASE_URL = (
 )
 
 engine = create_async_engine(
-    DATABASE_URL, 
+    #DATABASE_URL, 
+    "postgresql://neondb_owner:npg_Ah6URCQir2Np@ep-hidden-bush-aac7o7lt-pooler.westus3.azure.neon.tech/neondb?sslmode=require",
     echo=True
 )
 
