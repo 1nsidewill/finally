@@ -1,0 +1,231 @@
+<context>
+# Overview  
+Finally 프로젝트의 핵심 구성 요소인 벡터 인덱싱 마이크로서비스입니다. Scraper가 수집한 중고 바이크 매물 데이터를 PostgreSQL에서 읽어와 Qdrant 벡터 데이터베이스에 효율적으로 인덱싱하는 역할을 담당합니다. 이를 통해 Agent-service가 사용자에게 정확한 유사 매물을 추천할 수 있는 벡터 검색 생태계의 기반을 제공합니다.
+
+주요 사용자는 개발자이며, 확장 가능하고 안정적인 벡터스토어 생태계 구축이 핵심 목표입니다.
+
+# Core Features  
+## 1. 벡터 인덱싱 파이프라인
+- PostgreSQL의 매물 데이터를 OpenAI o3 large 모델(3072차원)로 임베딩
+- 매물 제목 + 연식 + 가격 + 키로수 + 본문 내용을 하나의 텍스트로 결합하여 임베딩
+- Qdrant에 벡터와 메타데이터를 효율적으로 저장 (Cosine similarity, HNSW 인덱스)
+
+## 2. Redis Queue 기반 비동기 처리
+- Scraper에서 Redis Queue에 작업 요청을 푸시
+- Indexer가 배치 단위로 큐에서 작업을 팝하여 처리
+- 3만건 초기 데이터 처리 후 실시간 업데이트 대응
+
+## 3. CRUD 작업 지원
+- 신규 매물 추가 인덱싱
+- 기존 매물 업데이트 (삭제 후 재인덱싱)
+- 매물 삭제 처리
+- is_conversion 플래그를 통한 PostgreSQL과 Qdrant 동기화
+
+## 4. 실패 처리 시스템
+- 실패한 인덱싱 작업을 별도 테이블에 로깅
+- 수동 재시도 엔드포인트 제공
+- 실패 원인 분석을 위한 상세 로그 저장
+
+# User Experience  
+## 개발자 워크플로우
+1. Scraper가 매물 수집 완료 후 Redis Queue에 sync 작업 추가
+2. Indexer가 배치 단위로 작업 처리 및 Qdrant 업데이트
+3. 실패 케이스는 별도 테이블에서 추적 및 수동 처리
+4. 심플한 모니터링 대시보드로 처리 상태 확인
+
+## API 사용자 인터페이스
+- `/sync` - 전체 동기화 수동 트리거
+- `/retry` - 실패한 작업 재시도
+- `/health` - 서비스 상태 확인
+- `/status` - 현재 처리 진행률 조회
+</context>
+
+<PRD>
+# Technical Architecture  
+## Database Schema
+### PostgreSQL (기존)
+- `products` 테이블: 매물 데이터 + is_conversion 플래그
+- `failed_operations` 테이블: 실패 로그 (operation_type, product_id, error_message, created_at, retry_count)
+
+### Qdrant Configuration
+- Collection: `bike_listings` 
+- Vector size: 3072 (OpenAI o3 large)
+- Distance: Cosine
+- Index: HNSW (기본값)
+- Payload 메타데이터: title, url, img_url, price, content, odo, brand, year, mileage 등
+
+### Redis Queue
+- Queue name: `indexing_jobs`
+- Job structure: `{operation: 'sync/update/delete', product_ids: [...]}`
+
+## System Components
+### 1. Queue Worker
+- Redis에서 작업을 배치 단위로 폴링
+- 동시 처리를 위한 멀티스레딩/비동기 처리
+- 실패 시 failed_operations 테이블에 로깅
+
+### 2. Embedding Service
+- OpenAI API 클라이언트
+- 텍스트 전처리 및 임베딩 생성
+- Rate limiting 및 API 에러 처리
+
+### 3. Qdrant Manager
+- 벡터 CRUD 작업 담당
+- 배치 업서트/삭제 최적화
+- 연결 풀링 및 재시도 로직
+
+### 4. Sync Controller
+- PostgreSQL is_conversion 플래그 기반 동기화
+- 증분 업데이트 감지 (updated_at 기준)
+- 벡터 데이터와 원본 데이터 일관성 보장
+
+## API Endpoints
+- `POST /sync` - 전체 동기화 작업을 Redis 큐에 추가
+- `POST /retry` - 실패한 작업들 재시도
+- `GET /health` - 서비스 헬스체크 (DB, Qdrant, Redis 연결 상태)
+- `GET /status` - 현재 처리 진행률 및 큐 상태
+- `GET /dashboard` - 심플한 모니터링 웹 인터페이스
+
+## Infrastructure
+- Docker Compose 기반 로컬 개발
+- Traefik 프록시를 통한 서비스 라우팅
+- GCP VM에서 온프렘으로 마이그레이션 예정
+- 환경별 설정: .env.dev, .env.prod
+
+# Development Roadmap  
+## Phase 1: MVP Core (우선순위 최상)
+### 1.1 프로젝트 구조 및 환경 설정
+- FastAPI 프로젝트 구조 설정
+- Docker Compose 서비스 정의 (indexer, redis)
+- 환경 변수 및 설정 관리 (Pydantic Settings)
+- Alembic 마이그레이션 설정 (failed_operations 테이블)
+
+### 1.2 핵심 인덱싱 파이프라인
+- PostgreSQL 연결 및 매물 데이터 조회
+- OpenAI 임베딩 서비스 구현
+- Qdrant 클라이언트 및 컬렉션 설정
+- 기본 CRUD 작업 (추가/수정/삭제)
+
+### 1.3 Redis Queue 시스템
+- Redis 연결 및 큐 관리
+- 비동기 워커 구현 (배치 처리)
+- 작업 직렬화/역직렬화
+- Scraper 연동을 위한 큐 인터페이스 매뉴얼
+
+### 1.4 기본 API 구현
+- `/sync` 엔드포인트 (큐에 작업 추가)
+- `/health` 헬스체크
+- `/status` 진행률 조회
+- 기본 에러 핸들링
+
+## Phase 2: 안정성 및 모니터링 (MVP 완성)
+### 2.1 실패 처리 시스템
+- failed_operations 테이블 스키마 정의
+- 실패 케이스 로깅 로직
+- `/retry` 엔드포인트 구현
+- 실패 원인 분석 기능
+
+### 2.2 심플 모니터링 대시보드
+- 처리 진행률 표시
+- 실패율 및 에러 로그 조회
+- 큐 상태 모니터링
+- 기본적인 웹 UI (HTML + JavaScript)
+
+### 2.3 성능 최적화
+- 배치 크기 최적화
+- 동시 처리 개수 조정
+- Qdrant 배치 업서트 구현
+- 메모리 사용량 최적화
+
+## Phase 3: 확장 및 고도화 (추후)
+### 3.1 Analytics Service 분리 준비
+- 시세 분석 로직 식별
+- 데이터 인터페이스 정의
+- 마이크로서비스 분리 가이드
+
+### 3.2 고급 기능
+- 더 정교한 실패 재시도 로직
+- 배치 작업 스케줄링
+- 성능 메트릭 수집
+- 알람 시스템
+
+# Logical Dependency Chain
+## 개발 순서
+1. **환경 설정 및 기본 구조** → 모든 후속 작업의 기반
+2. **PostgreSQL/Qdrant 연결** → 데이터 소스 확보
+3. **임베딩 서비스** → 핵심 비즈니스 로직
+4. **Redis Queue 워커** → 비동기 처리 기반
+5. **기본 API** → 외부 연동 인터페이스
+6. **실패 처리** → 안정성 확보
+7. **모니터링** → 운영 가시성
+
+## MVP 달성 조건
+- 3만건 초기 데이터를 안정적으로 인덱싱
+- Scraper와 Redis Queue 연동 완료
+- 기본적인 실패 처리 및 재시도 기능
+- 심플한 모니터링 대시보드
+
+# Risks and Mitigations  
+## Technical Challenges
+### 1. 대용량 데이터 처리
+- **위험**: 3만건 데이터 한번에 처리 시 메모리/시간 초과
+- **대응**: 배치 처리 및 진행률 추적, 재시작 가능한 체크포인트
+
+### 2. OpenAI API Rate Limiting
+- **위험**: 임베딩 API 호출 제한으로 처리 지연
+- **대응**: 지수 백오프 재시도, 배치 크기 동적 조정
+
+### 3. Qdrant 동시성 이슈
+- **위험**: 동시 업데이트로 인한 데이터 충돌
+- **대응**: 배치 업서트 사용, 적절한 동시성 제어
+
+## Integration Challenges
+### 1. Scraper 팀과의 협업
+- **위험**: Redis Queue 인터페이스 불일치
+- **대응**: 명확한 API 문서 및 예제 코드 제공
+
+### 2. 기존 PostgreSQL 스키마 변경
+- **위험**: 다른 서비스에 영향을 주는 스키마 수정
+- **대응**: 독립적인 테이블 추가, 기존 스키마 최소 변경
+
+# Appendix  
+## Redis Queue 매뉴얼 (Scraper 팀용)
+```python
+import redis
+import json
+
+# Redis 연결
+r = redis.Redis(host='redis-host', port=6379, db=0)
+
+# 동기화 작업 추가
+job = {
+    "operation": "sync",
+    "product_ids": [1, 2, 3, 4, 5]  # 또는 "all"
+}
+r.lpush("indexing_jobs", json.dumps(job))
+
+# 개별 업데이트
+job = {
+    "operation": "update", 
+    "product_ids": [123]
+}
+r.lpush("indexing_jobs", json.dumps(job))
+```
+
+## 환경 변수 설정
+```
+POSTGRES_HOST=localhost
+QDRANT_HOST=localhost
+QDRANT_PORT=6333
+REDIS_HOST=localhost
+OPENAI_API_KEY=your_key_here
+VECTOR_SIZE=3072
+```
+
+## 다음 단계: Analytics Service
+MVP 완료 후 시세 분석 서비스 설계:
+- 동일 모델 가격 분포 분석
+- 키로수/연식 대비 가격 효율성
+- 튜닝/사고 이력 기반 가치 평가
+- 꿀매물/호구매물 분류 알고리즘
+</PRD>

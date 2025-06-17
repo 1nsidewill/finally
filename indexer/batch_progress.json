@@ -1,0 +1,12 @@
+{
+  "total_items": 10,
+  "processed_items": 10,
+  "successful_items": 9,
+  "failed_items": 1,
+  "current_batch": 4,
+  "start_time": null,
+  "last_update": "2025-06-17T14:56:46.704519",
+  "failed_item_ids": [],
+  "completion_percentage": 100.0,
+  "success_rate": 90.0
+}

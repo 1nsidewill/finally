@@ -1,0 +1,305 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Setup Project Repository",
+        "description": "Initialize the project repository with necessary configurations and environment settings.",
+        "details": "Create a new Git repository and set up the project structure using FastAPI. Define Docker Compose services for the indexer and Redis. Use Pydantic for environment variable management and configure Alembic for database migrations, particularly for the failed_operations table.",
+        "testStrategy": "Verify the repository setup by running Docker Compose to ensure all services start correctly and environment variables are loaded properly.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Establish Database Connections",
+        "description": "Implement production-ready connections to PostgreSQL and Qdrant databases.",
+        "status": "done",
+        "dependencies": [
+          1
+        ],
+        "priority": "high",
+        "details": "Analyze the existing connection code in test_data_loader.py and refactor it to use a reusable database connection module. Manage connection settings using get_settings() from config.py. Create separate modules for PostgreSQL and Qdrant connections: src/database/postgresql.py for PostgreSQL connection and session management, and src/database/qdrant.py for Qdrant client and collection management. Ensure connection pooling and error handling are implemented.",
+        "testStrategy": "Write unit tests to verify the functionality of the new database connection modules, ensuring successful connections and proper error handling. Refactor test_data_loader.py to use the new modules and validate its functionality.",
+        "subtasks": [
+          {
+            "id": 3,
+            "title": "Analyze existing connection code in test_data_loader.py",
+            "description": "Review the current implementation of database connections in test_data_loader.py to understand the existing setup.",
+            "status": "done",
+            "details": "<info added on 2025-06-17T05:17:09.035Z>\n기존 `test_data_loader.py` 분석 결과에 따라 PostgreSQL 연결 모듈을 구현할 때 다음 사항을 고려해야 합니다:\n\n1. **연결 풀링 구현**: 매번 새로운 연결을 생성하는 대신 연결 풀링을 통해 성능을 개선합니다.\n2. **에러 핸들링 강화**: 연결 및 데이터 처리 중 발생할 수 있는 에러를 효과적으로 처리할 수 있는 메커니즘을 추가합니다.\n3. **모듈 재사용성 향상**: PostgreSQL 연결을 위한 모듈을 재사용 가능하게 설계하여 다른 부분에서도 활용할 수 있도록 합니다.\n</info added on 2025-06-17T05:17:09.035Z>"
+          },
+          {
+            "id": 4,
+            "title": "Implement PostgreSQL connection module",
+            "description": "Create src/database/postgresql.py to manage PostgreSQL connections and sessions, using get_settings() for configuration.",
+            "status": "done",
+            "details": "<info added on 2025-06-17T05:19:42.431Z>\nPostgreSQL 연결 모듈 구현 완료!\n\n**구현된 기능:**\n✅ src/database/postgresql.py - PostgreSQL 연결 관리자\n- 연결 풀링 (min_size=5, max_size=20)\n- Context Manager 방식의 안전한 연결 관리\n- 에러 핸들링 및 로깅\n- 프로덕션용 쿼리 메서드들 (execute_query, execute_command, execute_batch)\n- 비즈니스 로직 메서드들 (get_products_by_conversion_status, update_conversion_status 등)\n- 헬스체크 기능\n\n**핵심 개선사항:**\n- 기존: 매번 새 연결 생성 → 개선: 연결 풀링으로 성능 향상\n- 기존: 기본적인 에러 처리 → 개선: 구조화된 예외 처리 및 로깅\n- 기존: 함수 내 하드코딩 → 개선: 재사용 가능한 모듈화\n\n다음: Qdrant 연결 모듈 구현 완료로 진행\n</info added on 2025-06-17T05:19:42.431Z>"
+          },
+          {
+            "id": 5,
+            "title": "Implement Qdrant connection module",
+            "description": "Create src/database/qdrant.py to manage Qdrant client and collections, using get_settings() for configuration.",
+            "status": "done",
+            "details": "<info added on 2025-06-17T05:20:02.401Z>\nQdrant 연결 모듈 구현 완료!\n\n**구현된 기능:**\n✅ src/database/qdrant.py - Qdrant 연결 관리자\n- 동기/비동기 클라이언트 관리 (Lazy Loading)\n- OpenAI 임베딩 모델 + 캐싱 지원\n- 컬렉션 자동 생성 (COSINE distance, HNSW 인덱스)\n- 프로덕션용 메서드들 (upsert_points, delete_points, search_points)\n- 배치 임베딩 생성 지원\n- 헬스체크 기능\n\n**기존 대비 개선사항:**\n- 기존: qdrant_service 모듈 직접 사용 → 개선: 구조화된 연결 관리자\n- 기존: 인스턴스 생성시 연결 → 개선: Lazy Loading으로 필요시에만 연결\n- 기존: 단일 클라이언트 → 개선: 동기/비동기 클라이언트 분리 관리\n- 재사용 가능한 편의 함수들 제공\n\n✅ src/database/__init__.py - 모듈 패키지 구성 완료\n\n다음: 연결 풀링 및 에러 핸들링 검증으로 진행\n</info added on 2025-06-17T05:20:02.401Z>"
+          },
+          {
+            "id": 6,
+            "title": "Add connection pooling and error handling",
+            "description": "Ensure that connection pooling is set up and error handling is implemented for both PostgreSQL and Qdrant connections.",
+            "status": "done"
+          },
+          {
+            "id": 7,
+            "title": "Refactor test_data_loader.py to use new modules",
+            "description": "Update test_data_loader.py to utilize the new database connection modules for PostgreSQL and Qdrant.",
+            "status": "done",
+            "details": "<info added on 2025-06-17T05:31:50.713Z>\n기존 코드 정리 및 리팩터링 완료!\n\n**삭제된 파일들:**\n✅ src/services/test_data_loader.py - 삭제 완료\n✅ src/services/qdrant_service.py - 삭제 완료 (database/qdrant.py로 대체)\n\n**정리된 파일들:**\n✅ src/api/router.py - 기존 내용 삭제하고 indexer용 기본 구조로 재작성\n- 헬스체크 엔드포인트만 유지\n- Redis Queue 기반 sync 엔드포인트들 TODO로 준비\n\n**결과:**\n- 불필요한 레거시 코드 제거 완료\n- 새로운 database 모듈 기반으로 깔끔하게 정리\n- 다음 단계 (Embedding Service 구현)를 위한 준비 완료\n\n작업 2 완료 준비됨!\n</info added on 2025-06-17T05:31:50.713Z>"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Implement Embedding Service",
+        "description": "Develop the service to generate embeddings using OpenAI's API.",
+        "details": "Create a service that preprocesses text data and generates embeddings using OpenAI's o3 large model. Implement rate limiting and error handling strategies, such as exponential backoff for API calls.",
+        "testStrategy": "Test the embedding service with sample data to ensure embeddings are generated correctly and handle API rate limits effectively.",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "텍스트 전처리 모듈 개발",
+            "description": "매물 제목, 연식, 가격, 키로수, 본문 내용을 결합하여 임베딩에 적합한 텍스트로 변환하는 전처리 모듈을 개발합니다.",
+            "dependencies": [],
+            "details": "각 매물의 다양한 속성을 하나의 문자열로 결합하고, 불필요한 공백이나 특수 문자를 제거하여 OpenAI의 임베딩 모델에 입력할 수 있도록 준비합니다.",
+            "status": "done",
+            "testStrategy": "다양한 매물 데이터를 입력으로 사용하여 전처리 결과가 일관되고 정확한지 확인합니다."
+          },
+          {
+            "id": 2,
+            "title": "OpenAI 임베딩 서비스 통합",
+            "description": "OpenAI의 'text-embedding-3-large' 모델을 사용하여 전처리된 텍스트 데이터를 임베딩하는 서비스를 구현합니다.",
+            "dependencies": [
+              1
+            ],
+            "details": "OpenAI의 API를 호출하여 3072차원의 임베딩 벡터를 생성합니다. API 호출 시 필요한 인증 및 요청 형식을 준수합니다.",
+            "status": "done",
+            "testStrategy": "샘플 텍스트를 사용하여 임베딩 벡터의 차원과 품질을 검증합니다."
+          },
+          {
+            "id": 3,
+            "title": "Rate Limiting 및 Exponential Backoff 구현",
+            "description": "OpenAI API 호출 시 발생할 수 있는 Rate Limit 초과 및 오류 상황을 처리하기 위해 Rate Limiting과 Exponential Backoff 전략을 구현합니다.",
+            "dependencies": [
+              2
+            ],
+            "details": "API 호출 실패 시 지수적으로 증가하는 대기 시간을 적용하여 재시도하며, 최대 재시도 횟수를 설정합니다. 이를 통해 서비스의 안정성을 향상시킵니다.",
+            "status": "done",
+            "testStrategy": "의도적으로 API 호출 실패를 유도하여 재시도 로직이 정상적으로 작동하는지 확인합니다."
+          },
+          {
+            "id": 4,
+            "title": "배치 처리 기능 추가",
+            "description": "여러 개의 텍스트 데이터를 한 번에 처리할 수 있도록 배치 처리 기능을 구현합니다.",
+            "dependencies": [
+              2
+            ],
+            "details": "여러 개의 텍스트를 하나의 요청으로 처리하여 API 호출 횟수를 줄이고 효율성을 높입니다. 배치 크기를 조절할 수 있도록 설정합니다.",
+            "status": "done",
+            "testStrategy": "다양한 크기의 배치를 사용하여 성능과 정확도를 테스트합니다."
+          },
+          {
+            "id": 5,
+            "title": "기존 데이터베이스 연동",
+            "description": "기존의 'database/qdrant.py' 모듈과 연계하여 생성된 임베딩을 저장하고 검색할 수 있도록 기능을 통합합니다.",
+            "dependencies": [
+              2,
+              4
+            ],
+            "details": "생성된 임베딩 벡터를 데이터베이스에 저장하고, 필요 시 검색할 수 있도록 기존 모듈과의 연동을 구현합니다.\n<info added on 2025-06-17T06:15:14.788Z>\n데이터베이스 통합 완료! 주요 성과:\n\n✅ UUID 변환 문제 해결:\n- ensure_valid_uuid() 함수로 정수 ID를 UUID 형식으로 안전하게 변환\n- uuid.uuid5()를 사용해 동일한 ID에 대해 일관된 UUID 생성\n\n✅ 기존 데이터베이스 모듈 완벽 연동:\n- PostgreSQL: get_products_by_conversion_status() 메서드 활용\n- Qdrant: 기존 매니저의 임베딩 서비스와 벡터 저장 기능 활용\n- search_similar_vectors() 호환성 메서드 추가\n\n✅ config.py 기반 설정 통합:\n- 환경변수를 config.py에서 가져오도록 수정\n- 배치 처리 관련 설정들을 config.py에 optional로 추가\n- .env 파일 대신 config.py 방식으로 통일\n\n✅ 통합 테스트 100% 통과:\n- 7개 테스트 전부 성공\n- 설정, 데이터베이스 연결, 텍스트 전처리, 임베딩 생성, PostgreSQL/Qdrant 연산, 배치 프로세서 모두 정상 작동\n\n✅ 배치 프로세서 완성:\n- 기존 데이터베이스 스키마와 호환\n- 텍스트 전처리 → 임베딩 생성 → 벡터 저장 → PostgreSQL 플래그 업데이트 파이프라인 완성\n- 30k+ 매물 대량 처리 준비 완료\n</info added on 2025-06-17T06:15:14.788Z>",
+            "status": "done",
+            "testStrategy": "임베딩 생성 후 데이터베이스에 저장하고, 저장된 임베딩을 검색하여 일관성을 확인합니다."
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Develop Redis Queue Worker",
+        "description": "Create a worker to process jobs from the Redis queue asynchronously.",
+        "details": "Implement a Redis queue worker using Python's asyncio and aioredis to poll jobs in batches. Ensure the worker can handle sync, update, and delete operations efficiently and log failures to the failed_operations table.",
+        "testStrategy": "Simulate job processing by pushing test jobs to the Redis queue and verify that they are processed correctly and failures are logged.",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "status": "in-progress",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "배치 크기 튜닝",
+            "description": "Redis 큐에서 작업을 처리할 때 최적의 배치 크기를 결정하여 성능을 향상시킵니다.",
+            "dependencies": [],
+            "details": "다양한 배치 크기를 테스트하여 처리량과 지연 시간의 균형을 맞춥니다. 예를 들어, 작은 배치는 지연 시간을 줄일 수 있지만 처리량이 낮아질 수 있습니다. 반면, 큰 배치는 처리량을 높일 수 있지만 지연 시간이 증가할 수 있습니다.",
+            "status": "pending",
+            "testStrategy": "다양한 배치 크기로 부하 테스트를 수행하여 최적의 크기를 결정합니다."
+          },
+          {
+            "id": 2,
+            "title": "연결 풀 최적화",
+            "description": "aioredis의 연결 풀 설정을 조정하여 동시성 및 리소스 사용을 최적화합니다.",
+            "dependencies": [],
+            "details": "연결 풀의 최대 크기와 재사용 전략을 조정하여 성능을 향상시킵니다. 예를 들어, 연결 풀의 크기를 늘리면 동시 연결을 더 많이 처리할 수 있지만, 과도한 크기는 메모리 사용량을 증가시킬 수 있습니다. 따라서 적절한 크기를 설정하는 것이 중요합니다.",
+            "status": "pending",
+            "testStrategy": "다양한 연결 풀 크기와 설정으로 부하 테스트를 수행하여 최적의 구성을 찾습니다."
+          },
+          {
+            "id": 3,
+            "title": "메트릭 수집 및 모니터링 구현",
+            "description": "성능 모니터링을 위해 Prometheus와 같은 도구를 통합하여 메트릭을 수집하고 시각화합니다.",
+            "dependencies": [],
+            "details": "작업 처리율, 지연 시간, 오류율 등의 메트릭을 수집하고 시각화하여 성능을 모니터링합니다. 이를 통해 성능 병목 지점을 식별하고 최적화할 수 있습니다.",
+            "status": "pending",
+            "testStrategy": "수집된 메트릭을 기반으로 성능 분석을 수행하고, 필요에 따라 조정을 합니다."
+          },
+          {
+            "id": 4,
+            "title": "성능 테스트 계획 및 실행",
+            "description": "부하 테스트 도구를 사용하여 워커의 성능을 평가하고 병목 지점을 식별합니다.",
+            "dependencies": [],
+            "details": "Locust와 같은 부하 테스트 도구를 사용하여 다양한 시나리오에서 워커의 성능을 평가합니다. 이를 통해 병목 지점을 식별하고 최적화할 수 있습니다.",
+            "status": "pending",
+            "testStrategy": "다양한 부하 조건에서 테스트를 수행하고 결과를 분석하여 성능 개선 방안을 도출합니다."
+          },
+          {
+            "id": 5,
+            "title": "실패한 작업 로깅 및 재시도 메커니즘 구현",
+            "description": "실패한 작업을 로깅하고 재시도 메커니즘을 구현하여 신뢰성을 향상시킵니다.",
+            "dependencies": [],
+            "details": "실패한 작업을 'failed_operations' 테이블에 기록하고, 일정한 재시도 정책을 구현하여 작업의 신뢰성을 향상시킵니다. 예를 들어, 지수 백오프 전략을 사용하여 재시도 간격을 점진적으로 늘릴 수 있습니다.",
+            "status": "pending",
+            "testStrategy": "의도적으로 오류를 발생시켜 재시도 메커니즘이 올바르게 작동하는지 확인합니다."
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Build Basic API Endpoints",
+        "description": "Create basic API endpoints for synchronization, health checks, and status updates.",
+        "details": "Develop endpoints using FastAPI: POST /sync to add sync jobs to the queue, GET /health for service health checks, and GET /status to report processing progress. Implement basic error handling for these endpoints.",
+        "testStrategy": "Use tools like Postman to test API endpoints for expected responses and error handling.",
+        "priority": "medium",
+        "dependencies": [
+          1,
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Implement Failure Handling System",
+        "description": "Develop a system to log and retry failed indexing operations.",
+        "details": "Define the schema for the failed_operations table and implement logic to log failed operations. Create a POST /retry endpoint to manually retry failed jobs, with detailed logging for failure analysis.",
+        "testStrategy": "Test the failure logging by forcing errors in the queue worker and verify retry functionality through the API.",
+        "priority": "medium",
+        "dependencies": [
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Create Monitoring Dashboard",
+        "description": "Develop a simple web interface to monitor processing status and errors.",
+        "details": "Build a basic HTML and JavaScript dashboard to display processing progress, error rates, and queue status. Integrate with the API to fetch real-time data.",
+        "testStrategy": "Test the dashboard by simulating different processing states and ensuring accurate data display.",
+        "priority": "low",
+        "dependencies": [
+          5,
+          6
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Optimize Batch Processing",
+        "description": "Enhance performance by optimizing batch processing and concurrency settings.",
+        "details": "Adjust batch sizes and concurrency levels for the Redis queue worker to optimize memory usage and processing speed. Implement batch upsert operations in Qdrant for efficiency.",
+        "testStrategy": "Benchmark processing times with different batch sizes and concurrency settings to identify optimal configurations.",
+        "priority": "medium",
+        "dependencies": [
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Ensure Data Consistency",
+        "description": "Implement mechanisms to ensure data consistency between PostgreSQL and Qdrant.",
+        "details": "Use the is_conversion flag in PostgreSQL to track synchronization status and ensure consistency. Implement logic to detect and handle incremental updates based on updated_at timestamps.",
+        "testStrategy": "Test data consistency by simulating updates and deletions, ensuring changes are reflected in both databases.",
+        "priority": "medium",
+        "dependencies": [
+          3,
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Handle Large Data Volumes",
+        "description": "Implement strategies to manage large data volumes efficiently.",
+        "details": "Implement checkpointing and progress tracking to handle large data volumes without exceeding memory limits. Ensure the system can resume processing from the last checkpoint in case of failures.",
+        "testStrategy": "Test with large datasets to ensure the system can process them without running out of memory and can resume from checkpoints.",
+        "priority": "medium",
+        "dependencies": [
+          8
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Integrate with Scraper Team",
+        "description": "Ensure seamless integration with the Scraper team's Redis Queue interface.",
+        "details": "Provide clear API documentation and example code for the Scraper team to integrate with the Redis Queue. Ensure compatibility and handle any interface mismatches.",
+        "testStrategy": "Coordinate with the Scraper team to test integration and resolve any issues that arise during testing.",
+        "priority": "medium",
+        "dependencies": [
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Prepare for GCP Migration",
+        "description": "Plan and prepare for migrating the system to Google Cloud Platform.",
+        "details": "Document the migration process, including setting up GCP VMs and configuring network settings. Ensure all services are compatible with the GCP environment.",
+        "testStrategy": "Conduct a test migration to a GCP environment and verify that all services function correctly post-migration.",
+        "priority": "low",
+        "dependencies": [
+          1,
+          10
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-06-17T05:06:36.489Z",
+      "updated": "2025-06-17T08:07:12.035Z",
+      "description": "Tasks for master context"
+    }
+  }
+}
