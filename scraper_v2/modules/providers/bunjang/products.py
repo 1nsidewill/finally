@@ -5,7 +5,7 @@ from core.database import AsyncSessionLocal
 from modules import batch, common, od
 from utils import time, string
 from sqlalchemy import and_, select, delete
-from models import Product, File
+from models import Category, Product, File
 from modules.providers import bunjang
 
 logger = setup_logger(__name__)  # 현재 파일명 기준 이름 지정
@@ -26,15 +26,21 @@ UPSERT_OD = od.odSet()
 DELETE_OD = od.odSet()
 
 
-def reset(categories: list = None, keywords: list = None):
-    global PAGE, CATEGORIES, KEYWORDS, PRODUCTS, CATEGORIES_ROUND, KEYWORDS_ROUND
+async def reset(categories: list = None, keywords: list = None):
+    global PROVIDER, PAGE, CATEGORIES, KEYWORDS, PRODUCTS, CATEGORIES_ROUND, KEYWORDS_ROUND, UPSERT_OD, DELETE_OD
     PAGE = 1
+    if categories is None:
+        async with AsyncSessionLocal() as db:
+            dbCategories = select(Category).where(Category.provider_uid == PROVIDER.uid)
+            dbResult = await db.execute(dbCategories)
+            categories = [c.uid for c in dbResult.scalars().all()]
     CATEGORIES = categories or []
     CATEGORIES_ROUND = 0
-    # todo - if categories == None: select from database
     KEYWORDS = keywords or [""]
     KEYWORDS_ROUND = 0
     PRODUCTS = od.odSet()
+    UPSERT_OD = od.odSet()
+    DELETE_OD = od.odSet()
 
 async def search_list(task_id: int):
     global PAGE, LIMIT, CATEGORIES, CATEGORIES_ROUND, KEYWORDS, KEYWORDS_ROUND, PRODUCTS
@@ -84,9 +90,12 @@ async def fetch_product_detail(pid: str):
         url = f"https://api.bunjang.co.kr/api/pms/v3/products-detail/{pid}?viewerUid=-1"
         async with httpx.AsyncClient() as client:
             res = await client.get(url)
-            if res.status_code != 200:
+            if res.status_code == 404:
                 print(f"pid={pid} 상태코드={res.status_code} - 상품이 존재하지 않음(또는 비공개 등)")
                 await delete_product_by_pid(pid)
+                return None
+            elif res.status_code != 200:
+                logger.warning(f"pid={pid} 요청 실패 - status={res.status_code}")
                 return None
             return res.json().get("data", {}).get("product")
     except Exception as e:
@@ -99,6 +108,7 @@ async def upsert_product(task_id: int):
         global PROVIDER, UPSERT_OD
         if len(UPSERT_OD) == 0:
             batch.batch_list['bunjang_upsert'].stop()
+            return
 
         pid, udt = UPSERT_OD.pop()
         provider_uid = PROVIDER.uid
@@ -195,7 +205,7 @@ async def upsert_product(task_id: int):
                         ))
                 await db.commit()
         except Exception:
-            logger.exception("상품 upsert 중 에러 발생")
+            logger.exception(f"[{pid}] 상품 upsert 중 에러 발생")
             await db.rollback()
     except Exception:
         logger.exception("상품 upsert 중 에러 발생")
@@ -225,9 +235,10 @@ async def delete_product_by_pid(pid: str):
 async def delete_product(task_id: int):
     try:
         global PROVIDER, DELETE_OD
-        if len(UPSERT_OD) == 0:
+        if len(DELETE_OD) == 0:
             batch.batch_list['bunjang_delete'].stop()
-        pid, udt = UPSERT_OD.pop()
+            return
+        pid, udt = DELETE_OD.pop()
         await delete_product_by_pid(pid)
     except Exception as e:
         logger.exception("상품 delete 중 에러 발생")
@@ -281,46 +292,47 @@ async def sync_products():
         print(f"이미 실행중입니다. ")
         return
     PROCESSING = True
-    # 리셋
-    reset(categories=["750800"], keywords=common.read_keywords())
-    print(KEYWORDS)
+    try:
+        # 리셋
+        await reset(categories=["750800"], keywords=common.read_keywords())
+        print(KEYWORDS)
 
-    # 카테고리, 키워드 로 리스트 조회 (배치)
-    batch.batch_list['bunjang_list'] = batch.batchSet(5)
-    await batch.batch_list['bunjang_list'].batch(search_list, -1) # -1 횟수 제한 없이 무제한 반복 - search_list 에서 종료 호출
-    print(len(PRODUCTS))
+        # 카테고리, 키워드 로 리스트 조회 (배치)
+        batch.batch_list['bunjang_list'] = batch.batchSet(5)
+        await batch.batch_list['bunjang_list'].batch(search_list, -1) # -1 횟수 제한 없이 무제한 반복 - search_list 에서 종료 호출
+        print(len(PRODUCTS))
 
-    async with AsyncSessionLocal() as db:
-        dbProducts = select(Product).where(
-            (Product.status != 9) & (Product.provider_uid == PROVIDER.uid)
-        )
-        dbResult = await db.execute(dbProducts)
-        dbProductsList = dbResult.scalars().all()
-        db_od = od.odSet()
-        for p in dbProductsList:
-            db_od.push(p.pid, time.normalize_datetime(p.updated_dt))
+        async with AsyncSessionLocal() as db:
+            dbProducts = select(Product).where(
+                (Product.status != 9) & (Product.provider_uid == PROVIDER.uid)
+            )
+            dbResult = await db.execute(dbProducts)
+            dbProductsList = dbResult.scalars().all()
+            db_od = od.odSet()
+            for p in dbProductsList:
+                db_od.push(p.pid, time.normalize_datetime(p.updated_dt))
 
-    # safe_parse_datetime 등으로 날짜를 비교 가능한 형태로 통일해야 함
-    src_set = PRODUCTS
-    db_set = db_od
+        # safe_parse_datetime 등으로 날짜를 비교 가능한 형태로 통일해야 함
+        src_set = PRODUCTS
+        db_set = db_od
 
-    # 1. 신규/업데이트 대상 (all_product_pids에만 있음)
-    UPSERT_OD = src_set - db_set
-    # 2. 삭제 대상 (DB에만 있음)
-    DELETE_OD = db_set - src_set
+        # 1. 신규/업데이트 대상 (all_product_pids에만 있음)
+        UPSERT_OD = src_set - db_set
+        # 2. 삭제 대상 (DB에만 있음)
+        DELETE_OD = db_set - src_set
 
-    logger.info(f"✅ 신규/업데이트 대상: {len(UPSERT_OD)}개, 삭제 대상: {len(DELETE_OD)}개")
+        logger.info(f"✅ 신규/업데이트 대상: {len(UPSERT_OD)}개, 삭제 대상: {len(DELETE_OD)}개")
 
-    # 2. 상세 정보 upsert
-    logger.info(f"신규/업데이트 시작")
-    batch.batch_list['bunjang_upsert'] = batch.batchSet(10)
-    await batch.batch_list['bunjang_upsert'].batch(upsert_product, -1) # -1 횟수 제한 없이 무제한 반복 - search_list 에서 종료 호출
-    logger.info(f"신규/업데이트 완료")
+        # 2. 상세 정보 upsert
+        logger.info(f"신규/업데이트 시작")
+        batch.batch_list['bunjang_upsert'] = batch.batchSet(10)
+        await batch.batch_list['bunjang_upsert'].batch(upsert_product, -1) # -1 횟수 제한 없이 무제한 반복 - search_list 에서 종료 호출
+        logger.info(f"신규/업데이트 완료")
 
-    logger.info(f"삭제 시작")
-    # 3. 삭제 처리도 batch로 실행
-    batch.batch_list['bunjang_delete'] = batch.batchSet(10)
-    await batch.batch_list['bunjang_delete'].batch(delete_product, -1) # -1 횟수 제한 없이 무제한 반복 - search_list 에서 종료 호출
-    logger.info(f"삭제 완료")
-
-    PROCESSING = False
+        logger.info(f"삭제 시작")
+        # 3. 삭제 처리도 batch로 실행
+        batch.batch_list['bunjang_delete'] = batch.batchSet(10)
+        await batch.batch_list['bunjang_delete'].batch(delete_product, -1) # -1 횟수 제한 없이 무제한 반복 - search_list 에서 종료 호출
+        logger.info(f"삭제 완료")
+    finally:
+        PROCESSING = False
