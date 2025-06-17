@@ -108,10 +108,11 @@ async def sync_products(
             await asyncio.gather(*tasks)
 
             # 1. DB 조회
-            dbProducts = select(Product).where(Product.status != 9)
-            dbResult = await db.execute(dbProducts)
-            dbProductsList = dbResult.scalars().all()
-            dbList = [{"pid": p.pid, "updated_dt": p.updated_dt} for p in dbProductsList]
+            async with AsyncSessionLocal() as new_db:
+                dbProducts = select(Product).where(Product.status != 9)
+                dbResult = await new_db.execute(dbProducts)
+                dbProductsList = dbResult.scalars().all()
+                dbList = [{"pid": p.pid, "updated_dt": p.updated_dt} for p in dbProductsList]
 
             # safe_parse_datetime 등으로 날짜를 비교 가능한 형태로 통일해야 함
             src_set = set((item["pid"], safe_parse_datetime(item["updated_dt"])) for item in all_product_pids)

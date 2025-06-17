@@ -29,6 +29,7 @@ formatter = CustomFormatter(
 def setup_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
+    logger.propagate = False  # ✅ 중복 출력 방지: 부모(루트)에 전파 안 함
 
     if not logger.handlers:
         # 콘솔 핸들러

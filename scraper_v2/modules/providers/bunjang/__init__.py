@@ -4,7 +4,8 @@ from core.database import AsyncSessionLocal
 from sqlalchemy import select
 from models import Provider
 
-from . import categories, products
+from .categories import sync_categories
+from .products import sync_products
 
 logger = setup_logger(__name__)  # 현재 파일명 기준 이름 지정
 PROVIDER = None

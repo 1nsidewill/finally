@@ -7,6 +7,8 @@ from modules.providers import bunjang
 
 logger = setup_logger(__name__)  # 현재 파일명 기준 이름 지정
 
+PROVIDER = None
+
 async def sync_categories():
     global PROVIDER
     async with AsyncSessionLocal() as db:
