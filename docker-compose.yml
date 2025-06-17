@@ -44,6 +44,38 @@ services:
     networks:
       - app-network
 
+  redis:
+    image: redis:7.2
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: 10
+    volumes:
+      - ./volumes/redis-data:/data
+
+  redis-stack:
+    image: redis/redis-stack:latest
+    container_name: redis-stack
+    restart: always
+    ports:
+      - "8001:8001"  # Redis Insight web UI (http://localhost:8001)
+    networks:
+      - app-network
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: 10
+    volumes:
+      - ./volumes/redis-stack-data:/data
+      
   qdrant:
     image: qdrant/qdrant:latest
     restart: always
@@ -77,7 +109,6 @@ services:
     networks:
       - app-network
 
-      
   indexer:
     build:
       context: ./indexer
