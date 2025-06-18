@@ -4,6 +4,7 @@ import logging
 import json
 from typing import Dict, Any, Callable, Optional
 from contextlib import asynccontextmanager
+import uuid
 
 from src.services.failure_handler import (
     failure_handler, 
@@ -236,6 +237,44 @@ class ReliableWorker:
         except Exception as error:
             logger.error(f"재시도 작업 실행 중 오류: {error}")
             return False
+    
+    async def retry_failed_operation(self, operation_id: int) -> Optional[str]:
+        """특정 실패 작업을 재시도"""
+        try:
+            # Redis job ID 생성 (임시)
+            job_id = str(uuid.uuid4())
+            
+            # 실제로는 Redis 큐에 재시도 작업을 넣어야 하지만
+            # 여기서는 바로 실행
+            operations = await failure_handler.get_retryable_operations(100)
+            target_operation = None
+            
+            for op in operations:
+                if op.id == operation_id:
+                    target_operation = op
+                    break
+            
+            if not target_operation:
+                logger.warning(f"재시도할 작업을 찾을 수 없음: {operation_id}")
+                return None
+            
+            # 재시도 실행
+            success = await self._retry_operation(target_operation)
+            
+            if success:
+                await failure_handler.update_retry_attempt(
+                    target_operation.id, 
+                    success=True
+                )
+                logger.info(f"작업 {operation_id} 재시도 성공")
+                return job_id
+            else:
+                logger.warning(f"작업 {operation_id} 재시도 실패")
+                return None
+                
+        except Exception as e:
+            logger.error(f"작업 {operation_id} 재시도 중 오류: {e}")
+            return None
     
     async def get_failure_statistics(self) -> Dict[str, Any]:
         """실패 통계 조회"""

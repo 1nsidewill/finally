@@ -5,6 +5,7 @@ from typing import AsyncGenerator, List, Dict, Any, Optional
 import logging
 from contextlib import asynccontextmanager
 from src.config import get_settings
+from ..monitoring.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class PostgreSQLManager:
                 await pool.release(connection)
                 logger.debug("PostgreSQL 연결을 풀에 반환했습니다")
     
+    @MetricsCollector.track_db_query("postgresql", "select")
     async def execute_query(self, query: str, *args) -> List[asyncpg.Record]:
         """SELECT 쿼리 실행"""
         async with self.get_connection() as conn:
@@ -69,6 +71,7 @@ class PostgreSQLManager:
                 logger.error(f"쿼리 실행 실패: {query[:100]}... - {e}")
                 raise
     
+    @MetricsCollector.track_db_query("postgresql", "select_single")
     async def execute_single(self, query: str, *args) -> Optional[asyncpg.Record]:
         """단일 행 SELECT 쿼리 실행"""
         async with self.get_connection() as conn:
@@ -80,6 +83,7 @@ class PostgreSQLManager:
                 logger.error(f"단일 행 쿼리 실행 실패: {query[:100]}... - {e}")
                 raise
     
+    @MetricsCollector.track_db_query("postgresql", "command")
     async def execute_command(self, query: str, *args) -> str:
         """INSERT/UPDATE/DELETE 쿼리 실행"""
         async with self.get_connection() as conn:

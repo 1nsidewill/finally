@@ -99,3 +99,9 @@ $RECYCLE.BIN/
 
 # Linux
 *~
+
+# Added by Task Master AI
+logs
+# Environment variables
+.idea
+.vscode

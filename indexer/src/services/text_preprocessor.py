@@ -72,35 +72,35 @@ class ProductTextPreprocessor:
             logger.warning(f"가격 정규화 실패: {price} - {e}")
             return str(price) if price else ""
     
-    def normalize_mileage(self, mileage: Any) -> str:
-        """주행거리 정보 정규화"""
-        if not mileage:
+    def normalize_odo(self, odo: Any) -> str:
+        """주행거리(ODO) 정보 정규화"""
+        if not odo:
             return ""
         
         try:
             # 숫자 형태로 받은 경우
-            if isinstance(mileage, (int, float)):
-                return f"{mileage:,}km"
+            if isinstance(odo, (int, float)):
+                return f"{odo:,}km"
             
             # 문자열 형태로 받은 경우
-            mileage_str = str(mileage).replace(',', '')
+            odo_str = str(odo).replace(',', '')
             
             # 이미 단위가 있는 경우
-            km_match = self.patterns['km_units'].search(mileage_str)
+            km_match = self.patterns['km_units'].search(odo_str)
             if km_match:
                 number = km_match.group(1).replace(',', '')
                 if number.isdigit():
                     return f"{int(number):,}km"
             
             # 숫자만 있는 경우
-            if mileage_str.isdigit():
-                return f"{int(mileage_str):,}km"
+            if odo_str.isdigit():
+                return f"{int(odo_str):,}km"
             
-            return self.clean_text(mileage_str)
+            return self.clean_text(odo_str)
             
         except Exception as e:
-            logger.warning(f"주행거리 정규화 실패: {mileage} - {e}")
-            return str(mileage) if mileage else ""
+            logger.warning(f"주행거리 정규화 실패: {odo} - {e}")
+            return str(odo) if odo else ""
     
     def normalize_year(self, year: Any) -> str:
         """연식 정보 정규화"""
@@ -178,7 +178,7 @@ class ProductTextPreprocessor:
                 - title: 제목
                 - price: 가격  
                 - year: 연식
-                - mileage/odo: 주행거리
+                - odo: 주행거리 (mileage는 legacy)
                 - content: 본문 내용
                 - brand: 브랜드 (선택)
                 - model: 모델명 (선택)
@@ -191,7 +191,7 @@ class ProductTextPreprocessor:
             title = product_data.get('title', '')
             price = product_data.get('price')
             year = product_data.get('year')
-            mileage = product_data.get('mileage') or product_data.get('odo')
+            odo = product_data.get('odo') or product_data.get('mileage')  # odo 우선, mileage는 fallback
             content = product_data.get('content', '')
             
             # 브랜드/모델 정보 (있으면 사용, 없으면 제목에서 추출)
@@ -207,7 +207,7 @@ class ProductTextPreprocessor:
             clean_title = self.clean_text(title)
             normalized_price = self.normalize_price(price)
             normalized_year = self.normalize_year(year)
-            normalized_mileage = self.normalize_mileage(mileage)
+            normalized_odo = self.normalize_odo(odo)  # normalize_odo로 변경
             clean_content = self.clean_text(content)
             
             # 구조화된 텍스트 생성
@@ -225,8 +225,8 @@ class ProductTextPreprocessor:
                 specs.append(normalized_year)
             if normalized_price:
                 specs.append(normalized_price)
-            if normalized_mileage:
-                specs.append(normalized_mileage)
+            if normalized_odo:
+                specs.append(normalized_odo)  # normalized_odo로 변경
             
             if specs:
                 text_parts.append(f"스펙: {' | '.join(specs)}")

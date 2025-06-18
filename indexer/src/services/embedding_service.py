@@ -14,6 +14,7 @@ import threading
 
 from .text_preprocessor import ProductTextPreprocessor
 from ..config import get_settings
+from ..monitoring.metrics import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -195,10 +196,12 @@ class EmbeddingService:
         logger.error(f"알 수 없는 에러: {error}")
         return False
     
+    @MetricsCollector.track_embedding_generation("text-embedding-3-large")
     def create_embedding(self, text: str) -> Optional[np.ndarray]:
         """단일 텍스트의 임베딩 생성"""
         return self.create_embeddings([text])[0] if text.strip() else None
     
+    @MetricsCollector.track_embedding_generation("text-embedding-3-large")
     def create_embeddings(self, texts: List[str]) -> List[Optional[np.ndarray]]:
         """여러 텍스트의 임베딩 배치 생성"""
         if not texts:
@@ -309,6 +312,7 @@ class EmbeddingService:
             return [None] * len(product_batch)
     
     # 비동기 메서드들
+    @MetricsCollector.track_embedding_generation("text-embedding-3-large")
     async def create_embeddings_async(self, texts: List[str]) -> List[Optional[np.ndarray]]:
         """비동기 배치 임베딩 생성"""
         if not texts:

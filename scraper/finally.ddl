@@ -100,6 +100,21 @@ CREATE TABLE file (
     FOREIGN KEY (product_uid) REFERENCES product(uid) ON DELETE SET NULL ON UPDATE CASCADE
 );
 
+-- 7. failed_operations 테이블
+CREATE TABLE IF NOT EXISTS failed_operations (
+    id SERIAL PRIMARY KEY,
+    operation_type VARCHAR(50) NOT NULL,          -- 'sync', 'update', 'delete', 'embedding'
+    product_uid INTEGER NOT NULL,                 -- 관련 제품의 UID
+    error_message TEXT NOT NULL,                  -- 에러 메시지
+    error_details JSONB,                          -- 에러 상세 정보 (스택트레이스, 컨텍스트 등)
+    retry_count INTEGER DEFAULT 0,                -- 현재 재시도 횟수
+    max_retries INTEGER DEFAULT 3,                -- 최대 재시도 횟수
+    next_retry_at TIMESTAMP WITH TIME ZONE,       -- 다음 재시도 예정 시간
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),     -- 최초 실패 시간
+    last_attempted_at TIMESTAMP WITH TIME ZONE,            -- 마지막 시도 시간
+    resolved_at TIMESTAMP WITH TIME ZONE                   -- 해결된 시간 (NULL이면 미해결)
+);
+
 -- COMMENT 구문 추가
 
 -- provider
@@ -180,7 +195,20 @@ COMMENT ON COLUMN category."order" IS '정렬 순서';
 COMMENT ON COLUMN category.created_dt IS '생성일시';
 COMMENT ON COLUMN category.updated_dt IS '수정일시';
 
+-- failed_operations
+COMMENT ON TABLE failed_operations IS '실패한 작업들을 추적하고 재시도 메커니즘을 제공';
 
+COMMENT ON COLUMN failed_operations.id IS '자동증가 기본키';
+COMMENT ON COLUMN failed_operations.operation_type IS '작업 타입(sync, update, delete, embedding 등)';
+COMMENT ON COLUMN failed_operations.product_uid IS 'product 테이블 FK';
+COMMENT ON COLUMN failed_operations.error_message IS '에러 메시지';
+COMMENT ON COLUMN failed_operations.error_details IS 'JSON 형태의 에러 상세 정보 (스택트레이스, 컨텍스트 등)';
+COMMENT ON COLUMN failed_operations.retry_count IS '현재 재시도 횟수';
+COMMENT ON COLUMN failed_operations.max_retries IS '최대 재시도 횟수';
+COMMENT ON COLUMN failed_operations.next_retry_at IS '다음 재시도 예정 시간 (지수 백오프 적용)';
+COMMENT ON COLUMN failed_operations.created_at IS '최초 실패 시간';
+COMMENT ON COLUMN failed_operations.last_attempted_at IS '마지막 시도 시간';
+COMMENT ON COLUMN failed_operations.resolved_at IS '성공적으로 재시도된 시간 (NULL이면 미해결)';
 
 
 INSERT INTO provider

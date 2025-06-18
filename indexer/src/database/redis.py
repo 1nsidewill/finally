@@ -192,6 +192,42 @@ class RedisManager:
             logger.error(f"큐 길이 조회 실패: {e}")
             return 0
     
+    async def get_queue_size(self, queue_name: str) -> int:
+        """특정 큐의 크기 반환 (큐 길이와 동일)"""
+        try:
+            async with self.get_connection() as redis_client:
+                size = await redis_client.llen(queue_name)
+                return size
+        except Exception as e:
+            logger.error(f"큐 크기 조회 실패: {e}")
+            return 0
+    
+    async def ping(self) -> bool:
+        """Redis 연결 확인 (ping)"""
+        try:
+            async with self.get_connection() as redis_client:
+                await redis_client.ping()
+                return True
+        except Exception as e:
+            logger.error(f"Redis ping 실패: {e}")
+            return False
+    
+    async def enqueue_job(self, queue_name: str, job_data: Dict[str, Any]) -> str:
+        """작업을 큐에 추가하고 작업 ID 반환"""
+        try:
+            import uuid
+            job_id = str(uuid.uuid4())
+            job_data_with_id = {**job_data, "job_id": job_id}
+            
+            success = await self.push_job(job_data_with_id, queue_name)
+            if success:
+                return job_id
+            else:
+                raise Exception("Failed to enqueue job")
+        except Exception as e:
+            logger.error(f"작업 큐 추가 실패: {e}")
+            raise
+
     async def clear_queue(self, queue_name: Optional[str] = None) -> bool:
         """큐 비우기"""
         try:

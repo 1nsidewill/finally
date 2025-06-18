@@ -17,7 +17,7 @@ import uuid
 
 from src.config import get_settings
 from src.database.postgresql import PostgreSQLManager
-from src.database.qdrant import QdrantManager
+from src.database.qdrant import QdrantManager, generate_product_vector_id
 from src.services.text_preprocessor import ProductTextPreprocessor
 from src.services.embedding_service import EmbeddingService
 from src.services.error_handler import ErrorHandler, ErrorContext
@@ -50,7 +50,8 @@ class ProductData:
     price: Optional[int] = None
     content: Optional[str] = None
     year: Optional[int] = None
-    mileage: Optional[int] = None
+    odo: Optional[int] = None  # mileage -> odo로 변경
+    brand: Optional[str] = None  # brand 필드 추가
     page_url: Optional[str] = None
     images: List[str] = None
     
@@ -97,7 +98,8 @@ class JobProcessor:
             await self.qdrant_manager.get_async_client()
             await self.qdrant_manager.create_collection_if_not_exists()
             
-            # ErrorHandler 초기화
+            # ErrorHandler 초기화 - PostgreSQLManager 인스턴스 전달
+            self.error_handler.postgresql_manager = self.postgresql_manager
             await self.error_handler.initialize()
             
             logger.info("✅ JobProcessor 초기화 완료")
@@ -234,9 +236,9 @@ class JobProcessor:
         """PostgreSQL에서 제품 데이터 조회"""
         try:
             async with self.postgresql_manager.get_connection() as conn:
-                # product 테이블에서 기본 정보 조회
+                # product 테이블에서 기본 정보 조회 (모든 필요한 필드 포함)
                 product_query = """
-                    SELECT pid, title, price, content, year, mileage
+                    SELECT uid, pid, title, brand, price, content, year, odo
                     FROM product 
                     WHERE pid = $1
                 """
@@ -252,7 +254,7 @@ class JobProcessor:
                     WHERE product_uid = $1 
                     ORDER BY count
                 """
-                file_results = await conn.fetch(file_query, product_id)
+                file_results = await conn.fetch(file_query, product_row['uid'])
                 
                 # 이미지 URL 리스트 구성
                 images = []
@@ -270,10 +272,11 @@ class JobProcessor:
                 product_data = ProductData(
                     pid=product_row['pid'],
                     title=product_row['title'] or '',
+                    brand=product_row['brand'] or '',  # brand 필드 추가
                     price=product_row['price'],
                     content=product_row['content'] or '',
                     year=product_row['year'],
-                    mileage=product_row['mileage'],
+                    odo=product_row['odo'],  # mileage -> odo 변경
                     images=images
                 )
                 
@@ -293,13 +296,14 @@ class JobProcessor:
             operation_step = "data_fetch"
             product_data = await self._fetch_product_data(product_id)
             
-            # 2. 텍스트 전처리
+            # 2. 텍스트 전처리 (완전한 데이터로)
             operation_step = "text_preprocessing"
             processed_text = self.text_preprocessor.preprocess_product_data({
                 'title': product_data.title,
+                'brand': product_data.brand,  # brand 추가
                 'year': product_data.year,
                 'price': product_data.price,
-                'mileage': product_data.mileage,
+                'odo': product_data.odo,  # mileage -> odo 변경
                 'content': product_data.content
             })
             
@@ -309,13 +313,15 @@ class JobProcessor:
             
             # 4. Qdrant에 벡터 삽입
             operation_step = "vector_insertion"
-            vector_id = str(uuid.uuid4())
+            # 새로운 UUID 생성 로직: uid + provider 기반
+            vector_id = generate_product_vector_id(product_data.pid, "bunjang")
             metadata = {
                 'product_id': product_data.pid,
                 'title': product_data.title,
+                'brand': product_data.brand,  # brand 추가
                 'price': product_data.price,
                 'year': product_data.year,
-                'mileage': product_data.mileage,
+                'odo': product_data.odo,  # mileage -> odo 변경
                 'page_url': product_data.page_url,
                 'images': product_data.images,
                 'processed_text': processed_text,
@@ -383,12 +389,13 @@ class JobProcessor:
             # 2. 새로운 제품 데이터 조회
             product_data = await self._fetch_product_data(product_id)
             
-            # 3. 텍스트 전처리
+            # 3. 텍스트 전처리 (완전한 데이터로)
             processed_text = self.text_preprocessor.preprocess_product_data({
                 'title': product_data.title,
+                'brand': product_data.brand,  # brand 추가
                 'year': product_data.year,
                 'price': product_data.price,
-                'mileage': product_data.mileage,
+                'odo': product_data.odo,  # mileage -> odo 변경
                 'content': product_data.content
             })
             
@@ -400,9 +407,10 @@ class JobProcessor:
             metadata = {
                 'product_id': product_data.pid,
                 'title': product_data.title,
+                'brand': product_data.brand,  # brand 추가
                 'price': product_data.price,
                 'year': product_data.year,
-                'mileage': product_data.mileage,
+                'odo': product_data.odo,  # mileage -> odo 변경
                 'page_url': product_data.page_url,
                 'images': product_data.images,
                 'processed_text': processed_text,

@@ -122,8 +122,11 @@ class ErrorHandler:
     async def initialize(self):
         """데이터베이스 매니저 초기화"""
         try:
-            self.postgresql_manager = PostgreSQLManager()
-            await self.postgresql_manager.initialize()
+            # PostgreSQLManager가 없으면 새로 생성
+            if self.postgresql_manager is None:
+                self.postgresql_manager = PostgreSQLManager()
+                # PostgreSQL은 lazy loading이므로 pool 생성 테스트
+                await self.postgresql_manager.get_pool()
             
             # failed_operations 테이블 생성 (존재하지 않으면)
             await self._ensure_failed_operations_table()
@@ -143,35 +146,34 @@ class ErrorHandler:
     async def _ensure_failed_operations_table(self):
         """failed_operations 테이블 생성"""
         try:
-            conn = await self.postgresql_manager.get_connection()
-            
-            create_table_sql = """
-                CREATE TABLE IF NOT EXISTS failed_operations (
-                    id VARCHAR(36) PRIMARY KEY,
-                    job_id VARCHAR(100) NOT NULL,
-                    job_type VARCHAR(50) NOT NULL,
-                    product_id VARCHAR(100) NOT NULL,
-                    error_category VARCHAR(50) NOT NULL,
-                    error_severity VARCHAR(20) NOT NULL,
-                    error_message TEXT NOT NULL,
-                    error_details TEXT,
-                    operation_step VARCHAR(100) NOT NULL,
-                    retry_count INTEGER DEFAULT 0,
-                    max_retries INTEGER DEFAULT 3,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                    last_retry_at TIMESTAMP WITH TIME ZONE,
-                    resolved_at TIMESTAMP WITH TIME ZONE,
-                    additional_data JSONB
-                );
+            async with self.postgresql_manager.get_connection() as conn:
+                create_table_sql = """
+                    CREATE TABLE IF NOT EXISTS failed_operations (
+                        id VARCHAR(36) PRIMARY KEY,
+                        job_id VARCHAR(100) NOT NULL,
+                        job_type VARCHAR(50) NOT NULL,
+                        product_id VARCHAR(100) NOT NULL,
+                        error_category VARCHAR(50) NOT NULL,
+                        error_severity VARCHAR(20) NOT NULL,
+                        error_message TEXT NOT NULL,
+                        error_details TEXT,
+                        operation_step VARCHAR(100) NOT NULL,
+                        retry_count INTEGER DEFAULT 0,
+                        max_retries INTEGER DEFAULT 3,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        last_retry_at TIMESTAMP WITH TIME ZONE,
+                        resolved_at TIMESTAMP WITH TIME ZONE,
+                        additional_data JSONB
+                    );
+                    
+                    CREATE INDEX IF NOT EXISTS idx_failed_ops_job_id ON failed_operations(job_id);
+                    CREATE INDEX IF NOT EXISTS idx_failed_ops_product_id ON failed_operations(product_id);
+                    CREATE INDEX IF NOT EXISTS idx_failed_ops_category ON failed_operations(error_category);
+                    CREATE INDEX IF NOT EXISTS idx_failed_ops_created_at ON failed_operations(created_at);
+                """
                 
-                CREATE INDEX IF NOT EXISTS idx_failed_ops_job_id ON failed_operations(job_id);
-                CREATE INDEX IF NOT EXISTS idx_failed_ops_product_id ON failed_operations(product_id);
-                CREATE INDEX IF NOT EXISTS idx_failed_ops_category ON failed_operations(error_category);
-                CREATE INDEX IF NOT EXISTS idx_failed_ops_created_at ON failed_operations(created_at);
-            """
-            
-            await conn.execute(create_table_sql)
-            logger.debug("🔧 failed_operations 테이블 확인/생성 완료")
+                await conn.execute(create_table_sql)
+                logger.debug("🔧 failed_operations 테이블 확인/생성 완료")
             
         except Exception as e:
             logger.error(f"❌ failed_operations 테이블 생성 실패: {e}")
