@@ -6,6 +6,7 @@ __pycache__/
 *.c
 *.cpp
 *.so
+.cursor
 
 # Distribution / packaging
 .Python
