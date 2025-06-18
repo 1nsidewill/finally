@@ -26,7 +26,7 @@ export default function HomePage() {
   } catch (error) {
     alert(error.message); 
   }
-};
+}; 
 
   useEffect(() => {
     function handleClickOutside(event) {
