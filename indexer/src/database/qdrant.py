@@ -564,17 +564,73 @@ class QdrantManager:
         """컬렉션 정보 조회"""
         try:
             client = await self.get_async_client()
-            info = await client.get_collection(self.collection_name)
-            logger.debug("컬렉션 정보 조회 완료")
+            collection_info = await client.get_collection(collection_name=self.collection_name)
+            
             return {
-                "status": info.status,
-                "optimizer_status": info.optimizer_status,
-                "vectors_count": info.vectors_count,
-                "points_count": info.points_count,
-                "config": info.config
+                "status": collection_info.status.value,
+                "vectors_count": collection_info.vectors_count,
+                "points_count": collection_info.points_count,
+                "segments_count": collection_info.segments_count,
+                "config": collection_info.config
             }
         except Exception as e:
             logger.error(f"컬렉션 정보 조회 실패: {e}")
+            raise
+    
+    async def delete_collection(self) -> bool:
+        """컬렉션 삭제"""
+        try:
+            client = await self.get_async_client()
+            result = await client.delete_collection(collection_name=self.collection_name)
+            logger.info(f"컬렉션 삭제 완료: {self.collection_name}")
+            return result
+        except Exception as e:
+            logger.error(f"컬렉션 삭제 실패: {e}")
+            raise
+    
+    async def create_collection(self) -> bool:
+        """컬렉션 생성 (기존의 create_collection_if_not_exists와 별도)"""
+        try:
+            client = await self.get_async_client()
+            await client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config=VectorParams(
+                    size=self.vector_size,
+                    distance=Distance.COSINE
+                ),
+                # 🚀 Storage Optimization 설정
+                optimizers_config=models.OptimizersConfigDiff(
+                    # 인덱싱 임계값: 20K 포인트부터 인덱싱 시작
+                    indexing_threshold=20000,
+                    # 메모리 매핑 임계값: 50K 포인트부터 메모리 매핑 사용
+                    memmap_threshold=50000,
+                    # 최대 세그먼트 크기: 200K 포인트
+                    max_segment_size=200000,
+                    # 최대 최적화 스레드 수
+                    max_optimization_threads=2,
+                    # 삭제된 벡터 정리 임계값 (70%)
+                    deleted_threshold=0.7,
+                    # 벡터 압축 활성화
+                    vacuum_min_vector_number=1000,
+                    # 기본 세그먼트 수
+                    default_segment_number=2
+                ),
+                # 🗄️ 디스크 저장 최적화
+                on_disk_payload=True,  # payload를 디스크에 저장
+                # 🔧 HNSW 인덱스 최적화 설정
+                hnsw_config=models.HnswConfigDiff(
+                    m=16,  # 연결 수 (기본값, 메모리 vs 정확도 균형)
+                    ef_construct=100,  # 인덱스 구축 시 탐색 깊이
+                    full_scan_threshold=10000,  # 전체 스캔 임계값
+                    max_indexing_threads=2,  # 인덱싱 스레드 수
+                    on_disk=False,  # 인덱스는 메모리에 유지 (성능)
+                    payload_m=16  # payload와 연결된 링크 수
+                )
+            )
+            logger.info(f"컬렉션 생성 완료: {self.collection_name}")
+            return True
+        except Exception as e:
+            logger.error(f"컬렉션 생성 실패: {e}")
             raise
     
     async def health_check(self) -> bool:
@@ -595,6 +651,133 @@ class QdrantManager:
         if self._client:
             self._client.close()
             logger.info("Qdrant 동기 클라이언트 연결 종료")
+    
+    async def vector_exists(self, vector_id: str) -> bool:
+        """벡터가 존재하는지 확인"""
+        try:
+            # 유효한 UUID로 변환
+            try:
+                uuid.UUID(vector_id)
+                valid_uuid = vector_id
+            except ValueError:
+                valid_uuid = ensure_valid_uuid(vector_id)
+                
+            client = await self.get_async_client()
+            results = await client.retrieve(
+                collection_name=self.collection_name,
+                ids=[valid_uuid],
+                with_payload=False,
+                with_vectors=False
+            )
+            exists = len(results) > 0
+            logger.debug(f"벡터 존재 확인: {vector_id} -> {exists}")
+            return exists
+        except Exception as e:
+            logger.error(f"벡터 존재 확인 실패 (ID: {vector_id}): {e}")
+            return False
+    
+    async def scroll_vectors(self, limit: int = 100, offset: Optional[str] = None) -> List[Dict]:
+        """벡터들을 스크롤하여 가져오기"""
+        try:
+            client = await self.get_async_client()
+            
+            # scroll API 사용
+            scroll_result = await client.scroll(
+                collection_name=self.collection_name,
+                limit=limit,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False
+            )
+            
+            # 결과를 딕셔너리 형태로 변환
+            vectors = []
+            for point in scroll_result[0]:  # scroll_result는 (points, next_offset) 튜플
+                vectors.append({
+                    'id': str(point.id),
+                    'payload': point.payload or {}
+                })
+            
+            logger.debug(f"스크롤 결과: {len(vectors)}개 벡터")
+            return vectors
+        except Exception as e:
+            logger.error(f"벡터 스크롤 실패: {e}")
+            return []
+    
+    async def delete_vector(self, vector_id: str) -> bool:
+        """단일 벡터 삭제"""
+        try:
+            # 유효한 UUID로 변환
+            try:
+                uuid.UUID(vector_id)
+                valid_uuid = vector_id
+            except ValueError:
+                valid_uuid = ensure_valid_uuid(vector_id)
+                
+            client = await self.get_async_client()
+            result = await client.delete(
+                collection_name=self.collection_name,
+                wait=True,
+                points_selector=models.PointIdsList(points=[valid_uuid])
+            )
+            logger.debug(f"벡터 삭제 완료: {vector_id}")
+            return True
+        except Exception as e:
+            logger.error(f"벡터 삭제 실패 (ID: {vector_id}): {e}")
+            return False
+    
+    async def search_vectors(self, query_text: str = "", filter_conditions: Optional[Dict] = None, limit: int = 10) -> List[Dict]:
+        """벡터 검색 (JobProcessor 호환성)"""
+        try:
+            if not query_text and filter_conditions:
+                # 빈 쿼리로 필터만 사용하는 경우 - scroll 사용
+                from qdrant_client.models import Filter, FieldCondition, Match
+                
+                qdrant_filter = None
+                if filter_conditions and 'product_id' in filter_conditions:
+                    qdrant_filter = Filter(
+                        must=[
+                            FieldCondition(
+                                key="product_id",
+                                match=Match(value=filter_conditions['product_id'])
+                            )
+                        ]
+                    )
+                
+                client = await self.get_async_client()
+                scroll_result = await client.scroll(
+                    collection_name=self.collection_name,
+                    limit=limit,
+                    scroll_filter=qdrant_filter,
+                    with_payload=True,
+                    with_vectors=False
+                )
+                
+                # 결과를 딕셔너리 형태로 변환
+                vectors = []
+                for point in scroll_result[0]:
+                    vectors.append({
+                        'id': str(point.id),
+                        'payload': point.payload or {}
+                    })
+                
+                return vectors
+            else:
+                # 실제 텍스트 검색인 경우
+                if query_text:
+                    embedding = await self.generate_embedding(query_text)
+                    results = await self.search_points(
+                        query_vector=embedding,
+                        limit=limit,
+                        with_payload=True
+                    )
+                    return [{'id': str(r.id), 'payload': r.payload or {}} for r in results]
+                else:
+                    return []
+                    
+        except Exception as e:
+            logger.error(f"벡터 검색 실패: {e}")
+            return []
 
 # 전역 인스턴스 (싱글톤 패턴)
 qdrant_manager = QdrantManager()

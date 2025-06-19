@@ -144,32 +144,28 @@ class ErrorHandler:
         logger.info("🔹 ErrorHandler 리소스 정리 완료")
     
     async def _ensure_failed_operations_table(self):
-        """failed_operations 테이블 생성"""
+        """failed_operations 테이블 생성 - failure_handler.py와 호환되는 스키마"""
         try:
             async with self.postgresql_manager.get_connection() as conn:
                 create_table_sql = """
                     CREATE TABLE IF NOT EXISTS failed_operations (
-                        id VARCHAR(36) PRIMARY KEY,
-                        job_id VARCHAR(100) NOT NULL,
-                        job_type VARCHAR(50) NOT NULL,
-                        product_id VARCHAR(100) NOT NULL,
-                        error_category VARCHAR(50) NOT NULL,
-                        error_severity VARCHAR(20) NOT NULL,
+                        id SERIAL PRIMARY KEY,
+                        operation_type VARCHAR(50) NOT NULL,
+                        product_uid INTEGER NOT NULL,
                         error_message TEXT NOT NULL,
-                        error_details TEXT,
-                        operation_step VARCHAR(100) NOT NULL,
+                        error_details JSONB,
                         retry_count INTEGER DEFAULT 0,
                         max_retries INTEGER DEFAULT 3,
+                        next_retry_at TIMESTAMP WITH TIME ZONE,
                         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                        last_retry_at TIMESTAMP WITH TIME ZONE,
-                        resolved_at TIMESTAMP WITH TIME ZONE,
-                        additional_data JSONB
+                        last_attempted_at TIMESTAMP WITH TIME ZONE,
+                        resolved_at TIMESTAMP WITH TIME ZONE
                     );
                     
-                    CREATE INDEX IF NOT EXISTS idx_failed_ops_job_id ON failed_operations(job_id);
-                    CREATE INDEX IF NOT EXISTS idx_failed_ops_product_id ON failed_operations(product_id);
-                    CREATE INDEX IF NOT EXISTS idx_failed_ops_category ON failed_operations(error_category);
+                    CREATE INDEX IF NOT EXISTS idx_failed_ops_product_uid ON failed_operations(product_uid);
+                    CREATE INDEX IF NOT EXISTS idx_failed_ops_operation_type ON failed_operations(operation_type);
                     CREATE INDEX IF NOT EXISTS idx_failed_ops_created_at ON failed_operations(created_at);
+                    CREATE INDEX IF NOT EXISTS idx_failed_ops_retry ON failed_operations(retry_count, next_retry_at);
                 """
                 
                 await conn.execute(create_table_sql)

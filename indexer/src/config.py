@@ -31,23 +31,7 @@ class Settings(BaseSettings):
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
 
-    # Redis Connection Info
-    REDIS_HOST: str
-    REDIS_PORT: int
-    REDIS_PASSWORD: Optional[str] = None
-    REDIS_DB: Optional[int] = 0
-    REDIS_URL: Optional[str] = None  # 전체 URL로 설정할 경우 사용
-    
-    # Redis 연결 풀 설정 (벤치마크 최적화됨: 20 → 50으로 12.7% 성능 향상)
-    REDIS_MAX_CONNECTIONS: Optional[int] = 50
-    REDIS_CONNECTION_TIMEOUT: Optional[float] = 5.0
-    REDIS_RETRY_ON_TIMEOUT: Optional[bool] = True
-    
-    # Redis 큐 설정
-    REDIS_QUEUE_NAME: Optional[str] = "indexer_jobs"
-    REDIS_BATCH_SIZE: Optional[int] = 30  # 벤치마크 결과 기반 최적화 (10 → 30): 300 jobs/sec, 8.74ms 지연
-    REDIS_POLL_INTERVAL: Optional[float] = 1.0  # 초 단위
-    REDIS_BLOCKING_TIMEOUT: Optional[int] = 5   # 블로킹 대기 시간(초)
+
 
     # 배치 처리 관련 설정 (선택적)
     BATCH_SIZE: Optional[int] = 100
@@ -71,7 +55,8 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=env_file_path, 
-        env_file_encoding='utf-8'
+        env_file_encoding='utf-8',
+        extra='ignore'  # redis 등 사용하지 않는 환경변수 무시
     )
 
 @lru_cache()

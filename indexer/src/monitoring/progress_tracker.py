@@ -108,7 +108,7 @@ class ProcessingSession:
 class ProgressTracker:
     """📊 진행률 추적 및 모니터링 시스템"""
     
-    def __init__(self, session_id: str, log_dir: str = "./.taskmaster/logs"):
+    def __init__(self, session_id: str, log_dir: str = "./logs"):
         self.session_id = session_id
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)

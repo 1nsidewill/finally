@@ -9,18 +9,17 @@ from typing import List, Dict, Any, Optional
 import logging
 import time
 import json
+from datetime import datetime
 
 from ..database.postgresql import PostgreSQLManager
 from ..database.qdrant import QdrantManager
-from ..database.redis import RedisManager
-from ..services.embedding_service import EmbeddingService
-from ..services.failure_handler import FailureHandler
-from ..workers.reliable_worker import ReliableWorker
+from qdrant_client.models import PointStruct
+
+from ..services.embedding_service import EmbeddingService, get_embedding_service
 from ..monitoring.metrics import MetricsCollector, get_metrics_bytes
 from ..config import get_settings
 from .models import (
-    SyncRequest, SyncResponse, RetryRequest, RetryResponse,
-    QueueStatusResponse, FailedOperation, FailuresResponse
+    SyncRequest, SyncResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -28,6 +27,10 @@ router = APIRouter()
 
 # 설정 로드
 config = get_settings()
+
+# 데이터베이스 매니저 인스턴스
+postgres_manager = PostgreSQLManager()
+qdrant_manager = QdrantManager()
 
 # =============================================================================
 # 상태 확인 엔드포인트
@@ -41,15 +44,13 @@ async def health_check():
         # 각 컴포넌트 상태 확인
         pg_manager = PostgreSQLManager()
         qdrant_manager = QdrantManager()
-        redis_manager = RedisManager()
         
         status = {
             "status": "healthy",
             "timestamp": time.time(),
             "components": {
                 "postgresql": "unknown",
-                "qdrant": "unknown", 
-                "redis": "unknown"
+                "qdrant": "unknown"
             }
         }
         
@@ -70,13 +71,7 @@ async def health_check():
             status["components"]["qdrant"] = f"unhealthy: {str(e)}"
             status["status"] = "degraded"
         
-        # Redis 연결 확인
-        try:
-            await redis_manager.ping()
-            status["components"]["redis"] = "healthy"
-        except Exception as e:
-            status["components"]["redis"] = f"unhealthy: {str(e)}"
-            status["status"] = "degraded"
+
         
         return status
         
@@ -102,38 +97,15 @@ async def get_prometheus_metrics():
         raise HTTPException(status_code=500, detail=f"Failed to get metrics: {str(e)}")
 
 @router.get("/metrics/status", tags=["monitoring"])
-@MetricsCollector.track_redis_job("api", "metrics_status")
 async def get_metrics_status():
     """메트릭 수집 상태 확인"""
     try:
-        # Redis 큐 크기 확인
-        redis_manager = RedisManager()
-        queue_sizes = {}
-        
-        try:
-            # 기본 큐들 크기 확인
-            embedding_queue_size = await redis_manager.get_queue_size("embedding_queue")
-            sync_queue_size = await redis_manager.get_queue_size("sync_queue")
-            
-            queue_sizes = {
-                "embedding_queue": embedding_queue_size,
-                "sync_queue": sync_queue_size
-            }
-            
-            # 메트릭에 큐 크기 업데이트
-            await MetricsCollector.update_queue_size("embedding_queue", embedding_queue_size)
-            await MetricsCollector.update_queue_size("sync_queue", sync_queue_size)
-            
-        except Exception as e:
-            logger.warning(f"Failed to get queue sizes: {e}")
-        
         # 시스템 메트릭 업데이트
         await MetricsCollector.update_system_metrics()
         
         return {
             "status": "collecting",
             "timestamp": time.time(),
-            "queue_sizes": queue_sizes,
             "metrics_endpoint": "/metrics"
         }
         
@@ -145,34 +117,9 @@ async def get_metrics_status():
 # 동기화 관련 엔드포인트
 # =============================================================================
 
-@router.post("/sync/trigger", tags=["sync"])
-@MetricsCollector.track_redis_job("api", "sync_trigger")
-async def trigger_sync():
-    """수동 동기화 트리거"""
-    try:
-        redis_manager = RedisManager()
-        
-        # 동기화 작업을 Redis 큐에 추가
-        job_data = {
-            "type": "full_sync",
-            "timestamp": time.time(),
-            "triggered_by": "api"
-        }
-        
-        job_id = await redis_manager.enqueue_job("sync_queue", job_data)
-        
-        return {
-            "message": "Sync triggered successfully",
-            "job_id": job_id,
-            "timestamp": time.time()
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to trigger sync: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to trigger sync: {str(e)}")
+
 
 @router.get("/sync/status", tags=["sync"])
-@MetricsCollector.track_redis_job("api", "sync_status")
 async def get_sync_status():
     """동기화 상태 확인"""
     try:
@@ -214,7 +161,6 @@ async def get_sync_status():
 # =============================================================================
 
 @router.post("/search", tags=["search"])
-@MetricsCollector.track_redis_job("api", "vector_search")
 async def vector_search(query: Dict[str, Any]):
     """벡터 검색 (추후 구현)"""
     try:
@@ -230,6 +176,272 @@ async def vector_search(query: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=f"Vector search failed: {str(e)}")
 
 # =============================================================================
+# 🔄 데이터 리셋 및 개별 처리 엔드포인트
+# =============================================================================
+
+@router.post("/reset/qdrant", tags=["reset"])
+async def reset_qdrant_collection():
+    """🗑️ Qdrant bike 컬렉션 완전 삭제 및 재생성"""
+    try:
+        qdrant_manager = QdrantManager()
+        
+        # 컬렉션 존재 확인
+        collections = await qdrant_manager.list_collections()
+        collection_name = config.QDRANT_COLLECTION
+        
+        if collection_name in collections:
+            # 기존 컬렉션 삭제
+            await qdrant_manager.delete_collection()
+            logger.info(f"컬렉션 '{collection_name}' 삭제 완료")
+        
+        # 새 컬렉션 생성
+        await qdrant_manager.create_collection()
+        logger.info(f"컬렉션 '{collection_name}' 생성 완료")
+        
+        return {
+            "success": True,
+            "message": f"Qdrant 컬렉션 '{collection_name}' 리셋 완료",
+            "timestamp": time.time()
+        }
+        
+    except Exception as e:
+        logger.error(f"Qdrant 컬렉션 리셋 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"Qdrant 컬렉션 리셋 실패: {str(e)}")
+
+@router.post("/reset/postgresql", tags=["reset"])
+async def reset_postgresql_flags():
+    """🔄 PostgreSQL product 테이블의 is_conversion, vector_id 리셋"""
+    try:
+        pg_manager = PostgreSQLManager()
+        
+        async with pg_manager.get_connection() as conn:
+            # is_conversion을 false로, vector_id를 null로 리셋
+            result = await conn.execute(
+                "UPDATE product SET is_conversion = false, vector_id = null"
+            )
+            
+            # 확인용 통계
+            stats = await conn.fetchrow(
+                """
+                SELECT 
+                    COUNT(*) as total_products,
+                    COUNT(CASE WHEN is_conversion = true THEN 1 END) as converted_count,
+                    COUNT(CASE WHEN vector_id IS NOT NULL THEN 1 END) as vector_id_count
+                FROM product
+                """
+            )
+            
+        return {
+            "success": True,
+            "message": "PostgreSQL 플래그 리셋 완료",
+            "stats": dict(stats),
+            "timestamp": time.time()
+        }
+        
+    except Exception as e:
+        logger.error(f"PostgreSQL 플래그 리셋 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"PostgreSQL 플래그 리셋 실패: {str(e)}")
+
+@router.post("/process/single/{uid}", tags=["process"])
+async def process_single_product(uid: str):
+    """🔧 단일 제품 벡터화 처리 (테스트용)"""
+    try:
+        pg_manager = PostgreSQLManager()
+        qdrant_manager = QdrantManager()
+        embedding_service = EmbeddingService()
+        
+        # 1. PostgreSQL에서 제품 정보 조회
+        async with pg_manager.get_connection() as conn:
+            # uid가 숫자인지 확인 후 적절한 타입으로 변환
+            try:
+                if uid.isdigit():
+                    uid_param = int(uid)
+                else:
+                    uid_param = uid
+            except:
+                uid_param = uid
+            
+            product = await conn.fetchrow(
+                "SELECT uid, pid, provider_uid, title, content, price FROM product WHERE uid = $1",
+                uid_param
+            )
+            
+            if not product:
+                raise HTTPException(status_code=404, detail=f"제품을 찾을 수 없습니다: {uid}")
+        
+        # 2. 벡터 ID 생성 (provider_uid:pid 기반)
+        from ..database.qdrant import generate_product_vector_id
+        vector_id = generate_product_vector_id(
+            str(product['provider_uid'] or product['uid']), 
+            str(product['pid'])
+        )
+        
+        # 3. 임베딩 생성
+        text_to_embed = f"{product['title']} {product['content'] or ''}"
+        embedding = await embedding_service.generate_embedding(text_to_embed)
+        
+        # 4. Qdrant에 업로드
+        payload = {
+            "uid": str(product['uid']),
+            "pid": str(product['pid']),
+            "provider_uid": product['provider_uid'],
+            "title": product['title'],
+            "price": product['price']
+        }
+        
+        await qdrant_manager.upsert_points([{
+            "id": vector_id,
+            "vector": embedding,
+            "payload": payload
+        }])
+        
+        # 5. PostgreSQL 업데이트
+        async with pg_manager.get_connection() as conn:
+            await conn.execute(
+                "UPDATE product SET vector_id = $1, is_conversion = true WHERE uid = $2",
+                vector_id, uid_param
+            )
+        
+        return {
+            "success": True,
+            "message": f"제품 {uid} 처리 완료",
+            "data": {
+                "uid": str(product['uid']),
+                "pid": str(product['pid']),
+                "vector_id": vector_id,
+                "title": product['title'][:50] + "..." if len(product['title']) > 50 else product['title']
+            },
+            "timestamp": time.time()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"단일 제품 처리 실패 {uid}: {e}")
+        raise HTTPException(status_code=500, detail=f"단일 제품 처리 실패: {str(e)}")
+
+@router.get("/test/sample-products", tags=["test"])
+async def get_sample_products(limit: int = 5):
+    """🧪 테스트용 샘플 제품 목록 조회"""
+    try:
+        pg_manager = PostgreSQLManager()
+        
+        async with pg_manager.get_connection() as conn:
+            products = await conn.fetch(
+                """
+                SELECT uid, pid, provider_uid, title, is_conversion, vector_id
+                FROM product 
+                WHERE title IS NOT NULL AND title != ''
+                ORDER BY uid 
+                LIMIT $1
+                """,
+                limit
+            )
+        
+        return {
+            "success": True,
+            "message": f"샘플 제품 {len(products)}개 조회",
+            "products": [
+                {
+                    "uid": str(p['uid']),
+                    "pid": str(p['pid']),
+                    "provider_uid": p['provider_uid'],
+                    "title": p['title'][:50] + "..." if len(p['title']) > 50 else p['title'],
+                    "is_conversion": p['is_conversion'],
+                    "vector_id": str(p['vector_id']) if p['vector_id'] else None
+                }
+                for p in products
+            ],
+            "timestamp": time.time()
+        }
+        
+    except Exception as e:
+        logger.error(f"샘플 제품 조회 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"샘플 제품 조회 실패: {str(e)}")
+
+@router.get("/test/qdrant-status", tags=["test"])
+async def get_qdrant_test_status():
+    """🔍 Qdrant 컬렉션 상태 확인"""
+    try:
+        qdrant_manager = QdrantManager()
+        
+        # 컬렉션 정보 조회
+        collections = await qdrant_manager.list_collections()
+        collection_name = config.QDRANT_COLLECTION
+        
+        collection_exists = collection_name in collections
+        
+        if collection_exists:
+            collection_info = await qdrant_manager.get_collection_info()
+            points_count = collection_info.get('points_count', 0) if collection_info else 0
+        else:
+            points_count = 0
+        
+        return {
+            "success": True,
+            "collection_name": collection_name,
+            "collection_exists": collection_exists,
+            "points_count": points_count,
+            "timestamp": time.time()
+        }
+        
+    except Exception as e:
+        logger.error(f"Qdrant 상태 확인 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"Qdrant 상태 확인 실패: {str(e)}")
+
+@router.post("/process/batch-small", tags=["process"])
+async def process_small_batch(start_uid: int, count: int = 10):
+    """🔧 소량 배치 처리 (테스트 완료 후 사용)"""
+    try:
+        if count > 50:
+            raise HTTPException(status_code=400, detail="count는 50 이하여야 합니다")
+        
+        pg_manager = PostgreSQLManager()
+        
+        # 처리할 제품들 조회
+        async with pg_manager.get_connection() as conn:
+            products = await conn.fetch(
+                """
+                SELECT uid FROM product 
+                WHERE uid >= $1 AND title IS NOT NULL AND title != ''
+                AND is_conversion = false
+                ORDER BY uid 
+                LIMIT $2
+                """,
+                start_uid, count
+            )
+        
+        results = {
+            "success": 0,
+            "failed": 0,
+            "errors": []
+        }
+        
+        # 각 제품을 개별 처리
+        for product in products:
+            try:
+                # 단일 처리 엔드포인트 로직 재사용
+                await process_single_product(str(product['uid']))
+                results["success"] += 1
+            except Exception as e:
+                results["failed"] += 1
+                results["errors"].append(f"UID {product['uid']}: {str(e)}")
+                logger.error(f"배치 처리 중 실패 {product['uid']}: {e}")
+        
+        return {
+            "success": True,
+            "message": f"소량 배치 처리 완료: 성공 {results['success']}, 실패 {results['failed']}",
+            "results": results,
+            "timestamp": time.time()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"소량 배치 처리 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"소량 배치 처리 실패: {str(e)}")
+
+# =============================================================================
 # 디버깅 엔드포인트
 # =============================================================================
 
@@ -239,10 +451,8 @@ async def get_debug_info():
     try:
         return {
             "config": {
-                "redis_max_connections": config.REDIS_MAX_CONNECTIONS,
-                "redis_batch_size": config.REDIS_BATCH_SIZE,
                 "embedding_model": config.OPENAI_EMBEDDING_MODEL,
-                "qdrant_collection": config.QDRANT_COLLECTION_NAME
+                "qdrant_collection": config.QDRANT_COLLECTION
             },
             "timestamp": time.time()
         }
@@ -252,253 +462,91 @@ async def get_debug_info():
         raise HTTPException(status_code=500, detail=f"Failed to get debug info: {str(e)}")
 
 # =============================================================================
-# Redis Queue 운영 관리 API
+# 폴링 기반 작업 관리 API
 # =============================================================================
 
-@router.post("/sync", tags=["operations"], response_model=SyncResponse)
-@MetricsCollector.track_redis_job("api", "manual_sync")
-async def manual_sync(request: SyncRequest):
-    """특정 매물의 수동 재처리"""
+@router.post("/sync/direct", tags=["operations"], response_model=SyncResponse)
+async def direct_sync(request: SyncRequest):
+    """직접 동기화 실행 (큐 없이)"""
     try:
-        redis_manager = RedisManager()
+        # 직접 동기화 로직 (큐 없이)
+        embedding_service = EmbeddingService()
+        pg_manager = PostgreSQLManager()
+        qdrant_manager = QdrantManager()
         
-        # 작업 데이터 구성
-        job_data = {
-            "type": "sync",
-            "product_uid": request.product_uid,
-            "force": request.force,
-            "priority": request.priority,
-            "timestamp": time.time(),
-            "triggered_by": "manual_api"
-        }
+        processed_count = 0
+        failed_count = 0
         
-        # Redis 큐에 작업 추가
-        job_id = await redis_manager.enqueue_job("indexer_jobs", job_data)
-        
-        logger.info(f"Manual sync queued for product {request.product_uid}, job_id: {job_id}")
-        
-        return SyncResponse(
-            message=f"Manual sync queued for product {request.product_uid}",
-            job_id=job_id,
-            product_uid=request.product_uid,
-            timestamp=time.time()
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to queue manual sync: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to queue manual sync: {str(e)}")
-
-@router.post("/retry", tags=["operations"], response_model=RetryResponse)
-@MetricsCollector.track_redis_job("api", "retry_failed")
-async def retry_failed_operations(request: RetryRequest):
-    """실패한 작업들을 재시도"""
-    try:
-        failure_handler = FailureHandler()
-        reliable_worker = ReliableWorker()
-        
-        retried_count = 0
-        failed_retry_count = 0
-        job_ids = []
-        
-        # 재시도할 작업들 조회
-        if request.operation_ids:
-            # 특정 작업 ID들 재시도
-            for op_id in request.operation_ids:
+        async with pg_manager.get_connection() as conn:
+            if request.product_uid:
+                # 특정 UID 동기화
                 try:
-                    job_id = await reliable_worker.retry_failed_operation(op_id)
-                    if job_id:
-                        job_ids.append(job_id)
-                        retried_count += 1
+                    result = await conn.fetchrow(
+                        "SELECT * FROM products WHERE uid = $1", request.product_uid
+                    )
+                    if result:
+                        # 임베딩 생성 및 Qdrant 업로드
+                        await embedding_service.process_product(dict(result))
+                        processed_count += 1
                     else:
-                        failed_retry_count += 1
+                        failed_count += 1
+                        
                 except Exception as e:
-                    logger.error(f"Failed to retry operation {op_id}: {e}")
-                    failed_retry_count += 1
-        else:
-            # 재시도 가능한 모든 작업 조회
-            retryable_ops = await failure_handler.get_retryable_operations(
-                limit=request.max_operations
-            )
-            
-            for op in retryable_ops:
-                try:
-                    job_id = await reliable_worker.retry_failed_operation(op.id)
-                    if job_id:
-                        job_ids.append(job_id)
-                        retried_count += 1
-                    else:
-                        failed_retry_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to retry operation {op.id}: {e}")
-                    failed_retry_count += 1
-        
-        logger.info(f"Retry completed: {retried_count} success, {failed_retry_count} failed")
-        
-        return RetryResponse(
-            message=f"Retry completed: {retried_count} operations retried, {failed_retry_count} failed",
-            retried_count=retried_count,
-            failed_retry_count=failed_retry_count,
-            job_ids=job_ids,
-            timestamp=time.time()
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to retry operations: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to retry operations: {str(e)}")
-
-@router.get("/status", tags=["monitoring"], response_model=QueueStatusResponse)
-@MetricsCollector.track_redis_job("api", "queue_status")
-async def get_queue_status():
-    """Redis 큐 상태 및 워커 진행 현황 조회"""
-    try:
-        redis_manager = RedisManager()
-        failure_handler = FailureHandler()
-        
-        # Redis 큐 상태
-        queue_size = await redis_manager.get_queue_size("indexer_jobs")
-        
-        # 실패 통계
-        failure_stats = await failure_handler.get_failure_stats()
-        
-        # 워커 상태 (간단한 추정)
-        worker_status = {
-            "estimated_active_workers": min(queue_size, config.REDIS_MAX_CONNECTIONS),
-            "queue_throughput_estimate": "49.8 jobs/sec",  # 벤치마크 결과 기반
-            "estimated_completion_time": f"{queue_size / 49.8:.1f} seconds" if queue_size > 0 else "0 seconds"
-        }
-        
-        # 큐 상세 정보
-        queue_details = {
-            "indexer_jobs": {
-                "size": queue_size,
-                "estimated_processing_time": worker_status["estimated_completion_time"]
-            }
-        }
-        
-        # 실패 작업 수 계산
-        total_failed = sum(stats.get('total_failures', 0) for stats in failure_stats.values())
-        
-        return QueueStatusResponse(
-            total_pending=queue_size,
-            total_processing=0,  # Redis Queue에서는 정확한 처리 중 작업 수를 알기 어려움
-            total_failed=total_failed,
-            queue_details=queue_details,
-            worker_status=worker_status,
-            timestamp=time.time()
-        )
-        
-    except Exception as e:
-        logger.error(f"Failed to get queue status: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get queue status: {str(e)}")
-
-@router.get("/failures", tags=["monitoring"], response_model=FailuresResponse)
-@MetricsCollector.track_redis_job("api", "get_failures")
-async def get_failed_operations(
-    page: int = 1,
-    page_size: int = 50,
-    operation_type: Optional[str] = None,
-    product_uid: Optional[str] = None
-):
-    """실패한 작업 목록 조회"""
-    try:
-        failure_handler = FailureHandler()
-        
-        # 페이지네이션 계산
-        offset = (page - 1) * page_size
-        
-        # 실패 작업 조회 (임시로 간단한 구현)
-        # 실제로는 failure_handler에서 페이지네이션 지원하는 메서드 필요
-        try:
-            # PostgreSQL에서 직접 조회
-            pg_manager = PostgreSQLManager()
-            
-            # WHERE 조건 구성 (resolved_at이 NULL이면 아직 해결되지 않은 실패 작업)
-            where_conditions = ["resolved_at IS NULL"]
-            params = []
-            
-            if operation_type:
-                where_conditions.append(f"operation_type = ${len(params) + 1}")
-                params.append(operation_type)
-            
-            if product_uid:
-                where_conditions.append(f"product_uid = ${len(params) + 1}")
-                params.append(product_uid)
-            
-            where_clause = " AND ".join(where_conditions)
-            
-            # 총 개수 조회
-            count_query = f"SELECT COUNT(*) as total FROM failed_operations WHERE {where_clause}"
-            
-            # 데이터 조회
-            data_query = f"""
-            SELECT id, product_uid, operation_type, error_message, retry_count, max_retries,
-                   next_retry_at, created_at, last_attempted_at, error_details
-            FROM failed_operations 
-            WHERE {where_clause}
-            ORDER BY created_at DESC
-            LIMIT {page_size} OFFSET {offset}
-            """
-            
-            async with pg_manager.get_connection() as conn:
-                # 총 개수
-                count_result = await conn.fetchrow(count_query, *params)
-                total_count = count_result['total'] if count_result else 0
-                
-                # 데이터
-                rows = await conn.fetch(data_query, *params)
-                
-                failed_operations = []
-                for row in rows:
-                    # Parse error_details JSON string to dict
-                    context = None
-                    if row['error_details']:
-                        try:
-                            if isinstance(row['error_details'], str):
-                                context = json.loads(row['error_details'])
-                            else:
-                                context = row['error_details']  # Already a dict
-                        except json.JSONDecodeError:
-                            context = {"error": "Failed to parse error_details", "raw": str(row['error_details'])}
+                    logger.error(f"Failed to sync product {request.product_uid}: {e}")
+                    failed_count += 1
                     
-                    failed_operations.append(FailedOperation(
-                        id=row['id'],
-                        product_uid=str(row['product_uid']),  # Convert to string
-                        operation_type=row['operation_type'],
-                        error_message=row['error_message'],
-                        retry_count=row['retry_count'] or 0,
-                        max_retries=row['max_retries'] or 3,
-                        next_retry_at=row['next_retry_at'],
-                        created_at=row['created_at'],
-                        updated_at=row['last_attempted_at'] or row['created_at'],  # Use last_attempted_at as updated_at
-                        context=context
-                    ))
-                
-                has_more = (page * page_size) < total_count
-                
-                return FailuresResponse(
-                    failed_operations=failed_operations,
-                    total_count=total_count,
-                    page=page,
-                    page_size=page_size,
-                    has_more=has_more,
-                    timestamp=time.time()
-                )
-                
-        except Exception as e:
-            logger.error(f"Failed to query failed operations: {e}")
-            # 폴백: 빈 응답
-            return FailuresResponse(
-                failed_operations=[],
-                total_count=0,
-                page=page,
-                page_size=page_size,
-                has_more=False,
-                timestamp=time.time()
-            )
+        return SyncResponse(
+            status="completed",
+            message=f"직접 동기화 완료. 처리: {processed_count}, 실패: {failed_count}",
+            processed_count=processed_count,
+            failed_count=failed_count
+        )
         
     except Exception as e:
-        logger.error(f"Failed to get failed operations: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get failed operations: {str(e)}")
+        logger.error(f"Direct sync failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Direct sync failed: {str(e)}")
+
+@router.get("/status/processing", tags=["monitoring"])
+async def get_processing_status():
+    """현재 처리 상태 확인 (폴링용)"""
+    try:
+        pg_manager = PostgreSQLManager()
+        qdrant_manager = QdrantManager()
+        
+        # 데이터베이스 상태 확인
+        async with pg_manager.get_connection() as conn:
+            # 총 제품 수
+            total_products = await conn.fetchval("SELECT COUNT(*) FROM products")
+            
+            # 최근 업데이트된 제품 수 (1시간 내)
+            recent_updates = await conn.fetchval(
+                "SELECT COUNT(*) FROM products WHERE updated_at > NOW() - INTERVAL '1 hour'"
+            )
+        
+        # Qdrant 상태 확인
+        try:
+            collection_info = await qdrant_manager.get_collection_info()
+            vector_count = collection_info.points_count if collection_info else 0
+        except Exception as e:
+            logger.warning(f"Failed to get Qdrant count: {e}")
+            vector_count = 0
+        
+        # 동기화 백분율
+        sync_percentage = (vector_count / total_products * 100) if total_products > 0 else 0
+        
+        return {
+            "status": "active",
+            "total_products": total_products,
+            "vector_count": vector_count,
+            "sync_percentage": round(sync_percentage, 2),
+            "recent_updates": recent_updates,
+            "needs_sync": total_products != vector_count,
+            "timestamp": time.time()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get processing status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get processing status: {str(e)}")
 
 # Qdrant Storage Optimization 엔드포인트들 추가
 @router.post("/qdrant/optimize", response_model=Dict[str, Any])
@@ -558,336 +606,677 @@ async def batch_upload_optimized(
         logger.error(f"배치 업로드 설정 확인 실패: {e}")
         raise HTTPException(status_code=500, detail=f"배치 업로드 설정 확인 실패: {str(e)}")
 
-# Progress Tracking 관련 엔드포인트들 추가
-@router.post("/sync/enhanced", response_model=Dict[str, Any])
-async def sync_data_enhanced(
-    batch_size: int = 50,
-    use_optimized_batch: bool = True,
-    parallel_batches: int = 3,
-    session_id: Optional[str] = None
-):
-    """🚀 향상된 진행률 추적이 포함된 대용량 데이터 동기화"""
-    try:
-        from ..services.bulk_sync_enhanced import EnhancedBulkSynchronizer
-        
-        synchronizer = EnhancedBulkSynchronizer(batch_size=batch_size)
-        
-        result = await synchronizer.sync_all_products(
-            session_id=session_id,
-            use_optimized_batch=use_optimized_batch,
-            parallel_batches=parallel_batches
-        )
-        
-        return {
-            "success": True,
-            "message": "향상된 동기화 완료",
-            "data": result
-        }
-    except Exception as e:
-        logger.error(f"향상된 동기화 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"향상된 동기화 실패: {str(e)}")
 
-@router.get("/progress/{session_id}", response_model=Dict[str, Any])
-async def get_progress_status(session_id: str):
-    """📊 특정 세션의 진행률 상태 조회"""
-    try:
-        from ..monitoring.progress_tracker import ProgressTracker
-        from pathlib import Path
-        import json
-        
-        # 진행률 로그 파일 경로
-        log_dir = Path("./.taskmaster/logs")
-        progress_file = log_dir / f"progress_{session_id}.json"
-        
-        if not progress_file.exists():
-            raise HTTPException(status_code=404, detail=f"세션 {session_id}를 찾을 수 없습니다")
-        
-        # 진행률 데이터 로드
-        with open(progress_file, 'r', encoding='utf-8') as f:
-            progress_data = json.load(f)
-        
-        return {
-            "success": True,
-            "message": "진행률 조회 완료",
-            "data": progress_data
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"진행률 조회 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"진행률 조회 실패: {str(e)}")
-
-@router.get("/progress/sessions", response_model=Dict[str, Any])
-async def list_progress_sessions():
-    """📋 모든 진행률 추적 세션 목록 조회"""
-    try:
-        from pathlib import Path
-        import json
-        import glob
-        
-        log_dir = Path("./.taskmaster/logs")
-        log_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 모든 progress 파일 찾기
-        progress_files = glob.glob(str(log_dir / "progress_*.json"))
-        
-        sessions = []
-        for file_path in progress_files:
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                
-                session_info = data["session"]
-                session_info["file_path"] = file_path
-                sessions.append(session_info)
-                
-            except Exception as e:
-                logger.warning(f"세션 파일 읽기 실패 {file_path}: {e}")
-        
-        # 시작 시간으로 정렬 (최신순)
-        sessions.sort(key=lambda x: x.get("start_time", ""), reverse=True)
-        
-        return {
-            "success": True,
-            "message": f"{len(sessions)}개 세션 조회 완료",
-            "data": {
-                "sessions": sessions,
-                "total_count": len(sessions)
-            }
-        }
-    except Exception as e:
-        logger.error(f"세션 목록 조회 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"세션 목록 조회 실패: {str(e)}")
-
-@router.get("/progress/{session_id}/logs", response_model=Dict[str, Any])
-async def get_session_logs(session_id: str, lines: int = 100):
-    """📜 특정 세션의 상세 로그 조회"""
-    try:
-        from pathlib import Path
-        
-        log_dir = Path("./.taskmaster/logs")
-        log_file = log_dir / f"detailed_{session_id}.log"
-        
-        if not log_file.exists():
-            raise HTTPException(status_code=404, detail=f"세션 {session_id}의 로그를 찾을 수 없습니다")
-        
-        # 로그 파일 읽기 (마지막 N줄)
-        with open(log_file, 'r', encoding='utf-8') as f:
-            all_lines = f.readlines()
-        
-        # 요청된 줄 수만큼 가져오기 (마지막부터)
-        recent_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
-        
-        return {
-            "success": True,
-            "message": f"로그 조회 완료 ({len(recent_lines)}줄)",
-            "data": {
-                "session_id": session_id,
-                "total_lines": len(all_lines),
-                "returned_lines": len(recent_lines),
-                "logs": [line.strip() for line in recent_lines]
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"로그 조회 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"로그 조회 실패: {str(e)}")
-
-@router.delete("/progress/{session_id}", response_model=Dict[str, Any])
-async def delete_session_logs(session_id: str):
-    """🗑️ 특정 세션의 로그 파일들 삭제"""
-    try:
-        from pathlib import Path
-        
-        log_dir = Path("./.taskmaster/logs")
-        progress_file = log_dir / f"progress_{session_id}.json"
-        detail_file = log_dir / f"detailed_{session_id}.log"
-        
-        deleted_files = []
-        
-        if progress_file.exists():
-            progress_file.unlink()
-            deleted_files.append(str(progress_file))
-        
-        if detail_file.exists():
-            detail_file.unlink()
-            deleted_files.append(str(detail_file))
-        
-        if not deleted_files:
-            raise HTTPException(status_code=404, detail=f"세션 {session_id}의 파일을 찾을 수 없습니다")
-        
-        return {
-            "success": True,
-            "message": f"세션 {session_id} 로그 삭제 완료",
-            "data": {
-                "session_id": session_id,
-                "deleted_files": deleted_files
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"로그 삭제 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"로그 삭제 실패: {str(e)}")
-
-# 기존 sync 엔드포인트에 향상된 옵션 추가 (선택적으로 사용)
-@router.post("/sync/with-tracking", response_model=SyncResponse)
-async def sync_data_with_tracking(
-    request: SyncRequest,
-    enable_tracking: bool = True,
-    session_id: Optional[str] = None
-):
-    """📊 진행률 추적 옵션이 포함된 데이터 동기화"""
-    try:
-        if enable_tracking:
-            # 향상된 동기화 사용
-            from ..services.bulk_sync_enhanced import EnhancedBulkSynchronizer
-            
-            synchronizer = EnhancedBulkSynchronizer(batch_size=50)
-            result = await synchronizer.sync_all_products(session_id=session_id)
-            
-            return SyncResponse(
-                status="success",
-                message="진행률 추적과 함께 동기화 완료",
-                processed_count=result.get("successful", 0),
-                failed_count=result.get("failed", 0),
-                details=result
-            )
-        else:
-            # 기존 동기화 방식 사용
-            # ... 기존 sync 로직 ...
-            return SyncResponse(
-                status="success",
-                message="기본 동기화 완료",
-                processed_count=0,
-                failed_count=0
-            )
-    
-    except Exception as e:
-        logger.error(f"추적 동기화 실패: {e}")
-        raise HTTPException(status_code=500, detail=f"추적 동기화 실패: {str(e)}")
 
 # =============================================================================
-# Worker Daemon 관리 엔드포인트
+# 제품 관리 엔드포인트 (폴링 기반)
 # =============================================================================
 
-@router.get("/worker/status", tags=["worker"])
-@MetricsCollector.track_redis_job("api", "worker_status")
-async def get_worker_status():
-    """워커 데몬 상태 확인"""
+@router.get("/products/count", tags=["products"])
+async def get_products_count():
+    """제품 수 조회"""
     try:
-        # 워커 데몬 임포트 (글로벌 변수)
+        pg_manager = PostgreSQLManager()
+        
+        async with pg_manager.get_connection() as conn:
+            total_count = await conn.fetchval("SELECT COUNT(*) FROM products")
+            
+            # 제공업체별 수
+            provider_counts = await conn.fetch(
+                "SELECT provider, COUNT(*) as count FROM products GROUP BY provider"
+            )
+            
+            return {
+                "total_count": total_count,
+                "provider_counts": {row['provider']: row['count'] for row in provider_counts},
+                "timestamp": time.time()
+            }
+            
+    except Exception as e:
+        logger.error(f"Failed to get products count: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get products count: {str(e)}")
+
+@router.get("/products/recent", tags=["products"])
+async def get_recent_products(limit: int = 10):
+    """최근 제품 목록 조회"""
+    try:
+        pg_manager = PostgreSQLManager()
+        
+        async with pg_manager.get_connection() as conn:
+            rows = await conn.fetch(
+                "SELECT uid, title, provider, price, created_at "
+                "FROM products ORDER BY created_at DESC LIMIT $1",
+                limit
+            )
+            
+            products = []
+            for row in rows:
+                products.append({
+                    "uid": row['uid'],
+                    "title": row['title'],
+                    "provider": row['provider'],
+                    "price": row['price'],
+                    "created_at": row['created_at'].isoformat() if row['created_at'] else None
+                })
+            
+            return {
+                "products": products,
+                "count": len(products),
+                "timestamp": time.time()
+            }
+            
+    except Exception as e:
+        logger.error(f"Failed to get recent products: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get recent products: {str(e)}")
+
+@router.get("/products/{product_uid}/sync-status", tags=["products"])
+async def get_product_sync_status(product_uid: str):
+    """특정 제품의 동기화 상태 확인"""
+    try:
+        pg_manager = PostgreSQLManager()
+        qdrant_manager = QdrantManager()
+        
+        # PostgreSQL에서 제품 정보 조회
+        async with pg_manager.get_connection() as conn:
+            product = await conn.fetchrow(
+                "SELECT uid, title, provider, updated_at FROM products WHERE uid = $1",
+                product_uid
+            )
+            
+            if not product:
+                raise HTTPException(status_code=404, detail="Product not found")
+        
+        # Qdrant에서 벡터 존재 확인
         try:
-            from ..worker_daemon import worker_daemon
-            
-            # 워커 통계 가져오기
-            stats = worker_daemon.get_stats()
-            
-            return {
-                "status": "success",
-                "message": "워커 상태 조회 완료",
-                "worker": stats,
-                "timestamp": time.time()
-            }
-            
-        except ImportError:
-            return {
-                "status": "error",
-                "message": "워커 데몬이 사용 가능하지 않습니다",
-                "worker": {
-                    "daemon_running": False,
-                    "error": "Worker daemon not found"
-                },
-                "timestamp": time.time()
-            }
-            
-    except Exception as e:
-        logger.error(f"Failed to get worker status: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get worker status: {str(e)}")
-
-@router.post("/worker/start", tags=["worker"])
-@MetricsCollector.track_redis_job("api", "worker_start")
-async def start_worker():
-    """워커 데몬 시작 (테스트 목적)"""
-    try:
-        # 참고: 실제 프로덕션에서는 별도 프로세스로 워커를 실행해야 함
+            point = await qdrant_manager.get_point(product_uid)
+            vector_exists = point is not None
+        except Exception as e:
+            logger.warning(f"Failed to check vector for {product_uid}: {e}")
+            vector_exists = False
+        
         return {
-            "status": "info",
-            "message": "워커는 별도 프로세스로 실행해야 합니다",
-            "instructions": [
-                "터미널에서 다음 명령 실행:",
-                "python worker_daemon.py",
-                "또는",
-                "python -m src.worker_daemon"
-            ],
+            "product_uid": product_uid,
+            "title": product['title'],
+            "provider": product['provider'],
+            "updated_at": product['updated_at'].isoformat() if product['updated_at'] else None,
+            "vector_exists": vector_exists,
+            "sync_needed": not vector_exists,
             "timestamp": time.time()
         }
         
     except Exception as e:
-        logger.error(f"Failed to provide worker start info: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to provide worker start info: {str(e)}")
+        logger.error(f"Failed to get product sync status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get product sync status: {str(e)}")
 
-@router.post("/worker/stop", tags=["worker"])  
-@MetricsCollector.track_redis_job("api", "worker_stop")
-async def stop_worker():
-    """워커 데몬 중지 신호 (테스트 목적)"""
+@router.post("/sync/poll")
+async def poll_and_sync():
+    """
+    메인 폴링 엔드포인트: PostgreSQL에서 변경사항을 감지하고 Qdrant와 동기화
+    
+    작업 분류:
+    - INSERT: status=1, is_conversion=false, vector_id=null
+    - DELETE: status!=1, is_conversion=true  
+    - UPDATE: status=1, is_conversion=false, vector_id not null
+    """
     try:
-        return {
-            "status": "info", 
-            "message": "워커 중지는 워커 프로세스에서 직접 수행해야 합니다",
-            "instructions": [
-                "워커 프로세스에서 Ctrl+C 또는 SIGTERM 시그널 전송",
-                "또는 프로세스 ID를 찾아서 kill 명령 사용"
-            ],
-            "timestamp": time.time()
+        logger.info("🚀 동기화 폴링 시작")
+        
+        # PostgreSQL에서 동기화 대상 조회
+        async with postgres_manager.get_connection() as conn:
+            # INSERT 대상: 새로 추가된 활성 상품들 (file 테이블과 조인하여 이미지 URL 포함)
+            insert_query = """
+                SELECT p.provider_uid, p.pid, p.title, p.brand, p.content, p.price, p.location, p.odo, p.year, p.uid,
+                       f.url as file_url, f.count as file_count
+                FROM product p
+                LEFT JOIN file f ON p.uid = f.product_uid
+                WHERE p.status = 1 AND p.is_conversion = false AND p.vector_id IS NULL
+                ORDER BY p.created_dt ASC
+                LIMIT 5000
+            """
+            insert_products = await conn.fetch(insert_query)
+            
+            # DELETE 대상: 비활성화된 상품들
+            delete_query = """
+                SELECT provider_uid, pid, vector_id
+                FROM product 
+                WHERE status != 1 AND is_conversion = true AND vector_id IS NOT NULL
+                ORDER BY updated_dt ASC
+                LIMIT 5000
+            """
+            delete_products = await conn.fetch(delete_query)
+            
+            # UPDATE 대상: 수정된 활성 상품들 (file 테이블과 조인하여 이미지 URL 포함)
+            update_query = """
+                SELECT p.provider_uid, p.pid, p.title, p.brand, p.content, p.price, p.location, p.odo, p.year, p.vector_id, p.uid,
+                       f.url as file_url, f.count as file_count
+                FROM product p
+                LEFT JOIN file f ON p.uid = f.product_uid
+                WHERE p.status = 1 AND p.is_conversion = false AND p.vector_id IS NOT NULL
+                ORDER BY p.updated_dt ASC
+                LIMIT 5000
+            """
+            update_products = await conn.fetch(update_query)
+        
+        results = {
+            "insert_count": 0,
+            "update_count": 0, 
+            "delete_count": 0,
+            "errors": []
         }
         
-    except Exception as e:
-        logger.error(f"Failed to provide worker stop info: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to provide worker stop info: {str(e)}")
-
-@router.post("/worker/test-job", tags=["worker", "testing"])
-@MetricsCollector.track_redis_job("api", "worker_test_job")
-async def submit_test_job(
-    job_type: str = "sync",
-    product_id: str = "test_12345",
-    provider: str = "bunjang"
-):
-    """워커 테스트를 위한 테스트 Job 제출"""
-    try:
-        redis_manager = RedisManager()
+        # 1. INSERT 처리
+        if insert_products:
+            logger.info(f"📝 INSERT 처리: {len(insert_products)}개 상품")
+            
+            # 임베딩 생성을 위한 텍스트 준비
+            embedding_service = get_embedding_service()
+            texts_to_embed = []
+            
+            for product in insert_products:
+                # provider_uid:pid 형식으로 vector_id 생성
+                vector_id_str = f"{product['provider_uid']}:{product['pid']}"
+                
+                # 임베딩할 텍스트 조합 (brand + title + content + price + location + odo + year)
+                text_parts = []
+                if product['brand']:
+                    text_parts.append(str(product['brand']))
+                if product['title']:
+                    text_parts.append(str(product['title']))
+                if product['content']:
+                    text_parts.append(str(product['content']))
+                if product['price']:
+                    text_parts.append(f"가격 {product['price']}원")
+                if product['location']:
+                    text_parts.append(f"위치 {product['location']}")
+                if product['odo']:
+                    text_parts.append(f"주행거리 {product['odo']}km")
+                if product['year']:
+                    text_parts.append(f"연식 {product['year']}년")
+                
+                combined_text = " ".join(text_parts)
+                texts_to_embed.append(combined_text)
+            
+            # 배치로 임베딩 생성
+            embeddings = await embedding_service.create_embeddings_async(texts_to_embed)
+            
+            # Qdrant에 벡터 삽입
+            points_to_insert = []
+            successful_inserts = []
+            
+            for i, (product, embedding) in enumerate(zip(insert_products, embeddings)):
+                if embedding is not None:
+                    vector_id_str = f"{product['provider_uid']}:{product['pid']}"
+                    # UUID 생성
+                    import uuid
+                    import hashlib
+                    
+                    # provider_uid:pid를 hash하여 UUID 생성
+                    hash_string = hashlib.md5(vector_id_str.encode()).hexdigest()
+                    vector_uuid = str(uuid.UUID(hash_string))
+                    
+                    # 이미지 URL 리스트 생성
+                    image_urls = []
+                    if product['file_url'] and product['file_count'] and '{cnt}' in product['file_url']:
+                        file_count = product['file_count']
+                        url_template = product['file_url']
+                        for i in range(1, file_count + 1):
+                            image_url = url_template.replace('{cnt}', str(i))
+                            image_urls.append(image_url)
+                    
+                    # payload 구성
+                    payload = {
+                        "provider_uid": product['provider_uid'],
+                        "pid": str(product['pid']),
+                        "title": product['title'] or "",
+                        "brand": product['brand'] or "",
+                        "content": product['content'] or "",
+                        "price": float(product['price']) if product['price'] else 0.0,
+                        "location": product['location'] or "",
+                        "odo": float(product['odo']) if product['odo'] else 0.0,
+                        "year": int(product['year']) if product['year'] else 0,
+                        "image_url": image_urls
+                    }
+                    
+                    point = PointStruct(
+                        id=vector_uuid,
+                        vector=embedding.tolist(),
+                        payload=payload
+                    )
+                    points_to_insert.append(point)
+                    successful_inserts.append((product['provider_uid'], product['pid'], vector_uuid))
+            
+            # Qdrant에 배치 삽입
+            if points_to_insert:
+                await qdrant_manager.upsert_points_batch_optimized(points_to_insert)
+                
+                # PostgreSQL 업데이트: is_conversion=true, vector_id 설정
+                async with postgres_manager.get_connection() as conn:
+                    for provider_uid, pid, vector_uuid in successful_inserts:
+                        await conn.execute(
+                            "UPDATE product SET is_conversion = true, vector_id = $1, updated_dt = NOW() WHERE provider_uid = $2 AND pid = $3",
+                            vector_uuid, provider_uid, pid
+                        )
+                
+                results["insert_count"] = len(successful_inserts)
+                logger.info(f"✅ INSERT 완료: {len(successful_inserts)}개 상품")
         
-        # 테스트 Job 데이터 구성
-        test_job = {
-            "type": job_type,
-            "product_id": product_id,
-            "provider": provider,
-            "product_data": {
-                "title": f"테스트 상품 {product_id}",
-                "content": "워커 테스트를 위한 테스트 상품입니다",
-                "price": 10000,
-                "created_dt": time.time()
-            },
-            "timestamp": time.time(),
-            "source": "api_test"
-        }
+        # 2. DELETE 처리
+        if delete_products:
+            logger.info(f"🗑️ DELETE 처리: {len(delete_products)}개 상품")
+            
+            vector_ids_to_delete = [str(product['vector_id']) for product in delete_products if product['vector_id']]
+            
+            if vector_ids_to_delete:
+                # Qdrant에서 벡터 삭제
+                await qdrant_manager.delete_points(vector_ids_to_delete)
+                
+                # PostgreSQL 업데이트: vector_id를 null로 설정
+                async with postgres_manager.get_connection() as conn:
+                    for product in delete_products:
+                        if product['vector_id']:
+                            await conn.execute(
+                                "UPDATE product SET vector_id = NULL, updated_dt = NOW() WHERE provider_uid = $1 AND pid = $2",
+                                product['provider_uid'], product['pid']
+                            )
+                
+                results["delete_count"] = len(vector_ids_to_delete)
+                logger.info(f"✅ DELETE 완료: {len(vector_ids_to_delete)}개 상품")
         
-        # Redis 큐에 추가
-        job_id = await redis_manager.enqueue_job(config.REDIS_QUEUE_NAME, test_job)
+        # 3. UPDATE 처리 (기존 벡터 삭제 후 새 임베딩으로 재삽입)
+        if update_products:
+            logger.info(f"🔄 UPDATE 처리: {len(update_products)}개 상품")
+            
+            # 먼저 기존 벡터들을 삭제
+            vector_ids_to_delete = [str(product['vector_id']) for product in update_products if product['vector_id']]
+            if vector_ids_to_delete:
+                logger.info(f"🗑️ 기존 벡터 삭제: {len(vector_ids_to_delete)}개")
+                await qdrant_manager.delete_points(vector_ids_to_delete)
+            
+            # 임베딩 생성을 위한 텍스트 준비
+            texts_to_embed = []
+            
+            for product in update_products:
+                # 임베딩할 텍스트 조합 (새로운 데이터로 다시 생성)
+                text_parts = []
+                if product['brand']:
+                    text_parts.append(str(product['brand']))
+                if product['title']:
+                    text_parts.append(str(product['title']))
+                if product['content']:
+                    text_parts.append(str(product['content']))
+                if product['price']:
+                    text_parts.append(f"가격 {product['price']}원")
+                if product['location']:
+                    text_parts.append(f"위치 {product['location']}")
+                if product['odo']:
+                    text_parts.append(f"주행거리 {product['odo']}km")
+                if product['year']:
+                    text_parts.append(f"연식 {product['year']}년")
+                
+                combined_text = " ".join(text_parts)
+                texts_to_embed.append(combined_text)
+            
+            # 배치로 새 임베딩 생성
+            embeddings = await embedding_service.create_embeddings_async(texts_to_embed)
+            
+            # 새 임베딩으로 Qdrant에 재삽입
+            points_to_insert = []
+            successful_updates = []
+            
+            for i, (product, embedding) in enumerate(zip(update_products, embeddings)):
+                if embedding is not None and product['vector_id']:
+                    # 이미지 URL 리스트 생성
+                    image_urls = []
+                    if product['file_url'] and product['file_count'] and '{cnt}' in product['file_url']:
+                        file_count = product['file_count']
+                        url_template = product['file_url']
+                        for j in range(1, file_count + 1):
+                            image_url = url_template.replace('{cnt}', str(j))
+                            image_urls.append(image_url)
+                    
+                    # 동일한 vector_id를 사용하여 재삽입
+                    # payload 구성
+                    payload = {
+                        "provider_uid": product['provider_uid'],
+                        "pid": str(product['pid']),
+                        "title": product['title'] or "",
+                        "brand": product['brand'] or "",
+                        "content": product['content'] or "",
+                        "price": float(product['price']) if product['price'] else 0.0,
+                        "location": product['location'] or "",
+                        "odo": float(product['odo']) if product['odo'] else 0.0,
+                        "year": int(product['year']) if product['year'] else 0,
+                        "image_url": image_urls
+                    }
+                    
+                    point = PointStruct(
+                        id=str(product['vector_id']),  # 기존과 동일한 vector_id 사용 (문자열 변환)
+                        vector=embedding.tolist(),  # 새로 생성된 임베딩
+                        payload=payload
+                    )
+                    points_to_insert.append(point)
+                    successful_updates.append((product['provider_uid'], product['pid']))
+            
+            # Qdrant에 새 벡터들 배치 삽입
+            if points_to_insert:
+                logger.info(f"📝 새 임베딩으로 재삽입: {len(points_to_insert)}개")
+                await qdrant_manager.upsert_points_batch_optimized(points_to_insert)
+                
+                # PostgreSQL 업데이트: is_conversion=true
+                async with postgres_manager.get_connection() as conn:
+                    for provider_uid, pid in successful_updates:
+                        await conn.execute(
+                            "UPDATE product SET is_conversion = true, updated_dt = NOW() WHERE provider_uid = $1 AND pid = $2",
+                            provider_uid, pid
+                        )
+                
+                results["update_count"] = len(successful_updates)
+                logger.info(f"✅ UPDATE 완료: {len(successful_updates)}개 상품 (삭제 후 재삽입)")
         
+        logger.info("🎉 동기화 폴링 완료")
         return {
             "status": "success",
-            "message": "테스트 Job 제출 완료",
-            "job_id": job_id,
-            "job_data": test_job,
-            "queue": config.REDIS_QUEUE_NAME,
-            "timestamp": time.time()
+            "message": "동기화 폴링이 성공적으로 완료되었습니다",
+            "results": results
         }
         
     except Exception as e:
-        logger.error(f"Failed to submit test job: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to submit test job: {str(e)}")
+        logger.error(f"동기화 폴링 실패: {e}")
+        return {
+            "status": "error",
+            "message": f"동기화 폴링 중 오류 발생: {str(e)}"
+        }
+
+@router.post("/sync/poll-test")
+async def poll_and_sync_test(limit: int = 100):
+    """
+    테스트용 폴링 엔드포인트: 제한된 수량만 동기화 (기본 100개)
+    
+    작업 분류:
+    - INSERT: status=1, is_conversion=false, vector_id=null
+    - DELETE: status!=1, is_conversion=true  
+    - UPDATE: status=1, is_conversion=false, vector_id not null
+    """
+    try:
+        logger.info(f"🚀 테스트 동기화 폴링 시작 (limit: {limit})")
+        
+        # PostgreSQL에서 동기화 대상 조회 (제한된 수량)
+        async with postgres_manager.get_connection() as conn:
+            # INSERT 대상: 새로 추가된 활성 상품들 (file 테이블과 조인하여 이미지 URL 포함)
+            insert_query = """
+                SELECT p.provider_uid, p.pid, p.title, p.brand, p.content, p.price, p.location, p.odo, p.year, p.uid,
+                       f.url as file_url, f.count as file_count
+                FROM product p
+                LEFT JOIN file f ON p.uid = f.product_uid
+                WHERE p.status = 1 AND p.is_conversion = false AND p.vector_id IS NULL
+                ORDER BY p.created_dt ASC
+                LIMIT $1
+            """
+            insert_products = await conn.fetch(insert_query, limit)
+            
+            # DELETE 대상: 비활성화된 상품들
+            delete_query = """
+                SELECT provider_uid, pid, vector_id
+                FROM product 
+                WHERE status != 1 AND is_conversion = true AND vector_id IS NOT NULL
+                ORDER BY updated_dt ASC
+                LIMIT $1
+            """
+            delete_products = await conn.fetch(delete_query, limit)
+            
+            # UPDATE 대상: 수정된 활성 상품들 (file 테이블과 조인하여 이미지 URL 포함)
+            update_query = """
+                SELECT p.provider_uid, p.pid, p.title, p.brand, p.content, p.price, p.location, p.odo, p.year, p.vector_id, p.uid,
+                       f.url as file_url, f.count as file_count
+                FROM product p
+                LEFT JOIN file f ON p.uid = f.product_uid
+                WHERE p.status = 1 AND p.is_conversion = false AND p.vector_id IS NOT NULL
+                ORDER BY p.updated_dt ASC
+                LIMIT $1
+            """
+            update_products = await conn.fetch(update_query, limit)
+        
+        results = {
+            "insert_count": 0,
+            "update_count": 0, 
+            "delete_count": 0,
+            "errors": []
+        }
+        
+        logger.info(f"📊 대상 수량 - INSERT: {len(insert_products)}, DELETE: {len(delete_products)}, UPDATE: {len(update_products)}")
+        
+        # 1. INSERT 처리
+        if insert_products:
+            logger.info(f"📝 INSERT 처리: {len(insert_products)}개 상품")
+            
+            # 임베딩 생성을 위한 텍스트 준비
+            embedding_service = get_embedding_service()
+            texts_to_embed = []
+            
+            for product in insert_products:
+                # provider_uid:pid 형식으로 vector_id 생성
+                vector_id_str = f"{product['provider_uid']}:{product['pid']}"
+                
+                # 임베딩할 텍스트 조합 (brand + title + content + price + location + odo + year)
+                text_parts = []
+                if product['brand']:
+                    text_parts.append(str(product['brand']))
+                if product['title']:
+                    text_parts.append(str(product['title']))
+                if product['content']:
+                    text_parts.append(str(product['content']))
+                if product['price']:
+                    text_parts.append(f"가격 {product['price']}원")
+                if product['location']:
+                    text_parts.append(f"위치 {product['location']}")
+                if product['odo']:
+                    text_parts.append(f"주행거리 {product['odo']}km")
+                if product['year']:
+                    text_parts.append(f"연식 {product['year']}년")
+                
+                combined_text = " ".join(text_parts)
+                texts_to_embed.append(combined_text)
+                logger.debug(f"임베딩 텍스트 [{vector_id_str}]: {combined_text[:100]}...")
+            
+            # 배치로 임베딩 생성
+            logger.info(f"🤖 임베딩 생성 중... ({len(texts_to_embed)}개)")
+            embeddings = await embedding_service.create_embeddings_async(texts_to_embed)
+            logger.info(f"✅ 임베딩 생성 완료: {sum(1 for e in embeddings if e is not None)}/{len(embeddings)}개 성공")
+            
+            # Qdrant에 벡터 삽입
+            points_to_insert = []
+            successful_inserts = []
+            
+            for i, (product, embedding) in enumerate(zip(insert_products, embeddings)):
+                if embedding is not None:
+                    vector_id_str = f"{product['provider_uid']}:{product['pid']}"
+                    # UUID 생성
+                    import uuid
+                    import hashlib
+                    
+                    # provider_uid:pid를 hash하여 UUID 생성
+                    hash_string = hashlib.md5(vector_id_str.encode()).hexdigest()
+                    vector_uuid = str(uuid.UUID(hash_string))
+                    
+                    # 이미지 URL 리스트 생성
+                    image_urls = []
+                    if product['file_url'] and product['file_count'] and '{cnt}' in product['file_url']:
+                        file_count = product['file_count']
+                        url_template = product['file_url']
+                        for j in range(1, file_count + 1):
+                            image_url = url_template.replace('{cnt}', str(j))
+                            image_urls.append(image_url)
+                    
+                    # payload 구성
+                    payload = {
+                         "provider_uid": product['provider_uid'],
+                         "pid": str(product['pid']),
+                         "title": product['title'] or "",
+                         "brand": product['brand'] or "",
+                         "content": product['content'] or "",
+                         "price": float(product['price']) if product['price'] else 0.0,
+                         "location": product['location'] or "",
+                         "odo": float(product['odo']) if product['odo'] else 0.0,
+                         "year": int(product['year']) if product['year'] else 0,
+                         "image_url": image_urls
+                     }
+                     
+                    point = PointStruct(
+                        id=vector_uuid,
+                        vector=embedding.tolist(),
+                        payload=payload
+                    )
+                    points_to_insert.append(point)
+                    successful_inserts.append((product['provider_uid'], product['pid'], vector_uuid))
+                    logger.debug(f"Point 준비: {vector_id_str} -> {vector_uuid}")
+                else:
+                    logger.warning(f"임베딩 실패: {product['provider_uid']}:{product['pid']}")
+            
+            # Qdrant에 배치 삽입
+            if points_to_insert:
+                logger.info(f"📤 Qdrant에 벡터 업로드 중... ({len(points_to_insert)}개)")
+                await qdrant_manager.upsert_points_batch_optimized(points_to_insert)
+                logger.info(f"✅ Qdrant 업로드 완료")
+                
+                # PostgreSQL 업데이트: is_conversion=true, vector_id 설정
+                logger.info(f"📊 PostgreSQL 상태 업데이트 중...")
+                async with postgres_manager.get_connection() as conn:
+                    for provider_uid, pid, vector_uuid in successful_inserts:
+                        await conn.execute(
+                            "UPDATE product SET is_conversion = true, vector_id = $1, updated_dt = NOW() WHERE provider_uid = $2 AND pid = $3",
+                            vector_uuid, provider_uid, pid
+                        )
+                
+                results["insert_count"] = len(successful_inserts)
+                logger.info(f"✅ INSERT 완료: {len(successful_inserts)}개 상품")
+        
+        # 2. DELETE 처리
+        if delete_products:
+            logger.info(f"🗑️ DELETE 처리: {len(delete_products)}개 상품")
+            
+            vector_ids_to_delete = [str(product['vector_id']) for product in delete_products if product['vector_id']]
+            
+            if vector_ids_to_delete:
+                # Qdrant에서 벡터 삭제
+                await qdrant_manager.delete_points(vector_ids_to_delete)
+                
+                # PostgreSQL 업데이트: vector_id를 null로 설정
+                async with postgres_manager.get_connection() as conn:
+                    for product in delete_products:
+                        if product['vector_id']:
+                            await conn.execute(
+                                "UPDATE product SET vector_id = NULL, updated_dt = NOW() WHERE provider_uid = $1 AND pid = $2",
+                                product['provider_uid'], product['pid']
+                            )
+                
+                results["delete_count"] = len(vector_ids_to_delete)
+                logger.info(f"✅ DELETE 완료: {len(vector_ids_to_delete)}개 상품")
+        
+        # 3. UPDATE 처리 (기존 벡터 삭제 후 새 임베딩으로 재삽입)
+        if update_products:
+            logger.info(f"🔄 UPDATE 처리: {len(update_products)}개 상품")
+            
+            # 먼저 기존 벡터들을 삭제
+            vector_ids_to_delete = [str(product['vector_id']) for product in update_products if product['vector_id']]
+            if vector_ids_to_delete:
+                logger.info(f"🗑️ 기존 벡터 삭제: {len(vector_ids_to_delete)}개")
+                await qdrant_manager.delete_points(vector_ids_to_delete)
+            
+            # 임베딩 생성을 위한 텍스트 준비
+            texts_to_embed = []
+            
+            for product in update_products:
+                # 임베딩할 텍스트 조합 (새로운 데이터로 다시 생성)
+                text_parts = []
+                if product['brand']:
+                    text_parts.append(str(product['brand']))
+                if product['title']:
+                    text_parts.append(str(product['title']))
+                if product['content']:
+                    text_parts.append(str(product['content']))
+                if product['price']:
+                    text_parts.append(f"가격 {product['price']}원")
+                if product['location']:
+                    text_parts.append(f"위치 {product['location']}")
+                if product['odo']:
+                    text_parts.append(f"주행거리 {product['odo']}km")
+                if product['year']:
+                    text_parts.append(f"연식 {product['year']}년")
+                
+                combined_text = " ".join(text_parts)
+                texts_to_embed.append(combined_text)
+            
+            # 배치로 새 임베딩 생성
+            embeddings = await embedding_service.create_embeddings_async(texts_to_embed)
+            
+            # 새 임베딩으로 Qdrant에 재삽입
+            points_to_insert = []
+            successful_updates = []
+            
+            for i, (product, embedding) in enumerate(zip(update_products, embeddings)):
+                if embedding is not None and product['vector_id']:
+                    # 이미지 URL 리스트 생성
+                    image_urls = []
+                    if product['file_url'] and product['file_count'] and '{cnt}' in product['file_url']:
+                        file_count = product['file_count']
+                        url_template = product['file_url']
+                        for j in range(1, file_count + 1):
+                            image_url = url_template.replace('{cnt}', str(j))
+                            image_urls.append(image_url)
+                    
+                    # 동일한 vector_id를 사용하여 재삽입
+                    # payload 구성
+                    payload = {
+                        "provider_uid": product['provider_uid'],
+                        "pid": str(product['pid']),
+                        "title": product['title'] or "",
+                        "brand": product['brand'] or "",
+                        "content": product['content'] or "",
+                        "price": float(product['price']) if product['price'] else 0.0,
+                        "location": product['location'] or "",
+                        "odo": float(product['odo']) if product['odo'] else 0.0,
+                        "year": int(product['year']) if product['year'] else 0,
+                        "image_url": image_urls
+                    }
+                    
+                    point = PointStruct(
+                        id=str(product['vector_id']),  # 기존과 동일한 vector_id 사용 (문자열 변환)
+                        vector=embedding.tolist(),  # 새로 생성된 임베딩
+                        payload=payload
+                    )
+                    points_to_insert.append(point)
+                    successful_updates.append((product['provider_uid'], product['pid']))
+            
+            # Qdrant에 새 벡터들 배치 삽입
+            if points_to_insert:
+                logger.info(f"📝 새 임베딩으로 재삽입: {len(points_to_insert)}개")
+                await qdrant_manager.upsert_points_batch_optimized(points_to_insert)
+                
+                # PostgreSQL 업데이트: is_conversion=true
+                async with postgres_manager.get_connection() as conn:
+                    for provider_uid, pid in successful_updates:
+                        await conn.execute(
+                            "UPDATE product SET is_conversion = true, updated_dt = NOW() WHERE provider_uid = $1 AND pid = $2",
+                            provider_uid, pid
+                        )
+                
+                results["update_count"] = len(successful_updates)
+                logger.info(f"✅ UPDATE 완료: {len(successful_updates)}개 상품 (삭제 후 재삽입)")
+        
+        logger.info("🎉 테스트 동기화 폴링 완료")
+        return {
+            "status": "success",
+            "message": f"테스트 동기화 폴링이 성공적으로 완료되었습니다 (limit: {limit})",
+            "results": results
+        }
+        
+    except Exception as e:
+        logger.error(f"테스트 동기화 폴링 실패: {e}")
+        return {
+            "status": "error",
+            "message": f"테스트 동기화 폴링 중 오류 발생: {str(e)}"
+        }
 
 # Export alias for compatibility
 api_router = router
+

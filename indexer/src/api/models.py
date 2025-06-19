@@ -2,7 +2,7 @@
 API 요청/응답 모델들
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
@@ -121,3 +121,5 @@ class FailuresResponse(BaseModel):
     page_size: int
     has_more: bool
     timestamp: float
+
+

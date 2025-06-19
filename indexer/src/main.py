@@ -11,7 +11,6 @@ from fastapi.staticfiles import StaticFiles
 import uvloop
 import asyncio
 from src.database.postgresql import PostgreSQLManager
-from src.database.redis import RedisManager
 from src.database.qdrant import QdrantManager
 from dotenv import load_dotenv
 
@@ -41,8 +40,7 @@ app.add_middleware(
         "http://127.0.0.1:8000",
         "http://10.178.0.2:3000",
         "http://10.178.0.2:8000",
-        "http://10.178.0.2:80",
-        "https://scraper.k-dev.me"
+        "http://10.178.0.2:80"
     ],
     allow_credentials=True,
     allow_methods=["*"],

@@ -13,7 +13,6 @@ Usage:
 
 from .postgresql import postgres_manager, execute_query, execute_command
 from .qdrant import qdrant_manager, generate_embedding, get_async_client, get_sync_client
-from .redis import redis_manager
 
 __all__ = [
     "postgres_manager",
@@ -22,6 +21,5 @@ __all__ = [
     "execute_command",
     "generate_embedding",
     "get_async_client",
-    "get_sync_client",
-    "redis_manager"
+    "get_sync_client"
 ]
